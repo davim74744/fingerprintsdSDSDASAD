@@ -1,0 +1,1247 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Raio-X do Navegador</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Schibsted+Grotesk:wght@400;500;600;700;800&display=swap">
+<style>
+/* Layout: relatório de diagnóstico em coluna única — leitura bruta do user-agent, 8 blocos de resumo, barra fixa de busca, seções chave/valor, ações com permissão, mapa de APIs e comparador */
+:root{
+  --bg:#EEF2F4; --surface:#FFFFFF; --ink:#13202B; --muted:#5A6774; --line:#D6DDE3; --soft:#E5ECF0;
+  --accent:#0A6C84; --accent-ink:#FFFFFF; --good:#13753A; --bad:#B42318; --warn:#8A5A00;
+  --f-ui:"Schibsted Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D1216; --surface:#141B21; --ink:#E2E8ED; --muted:#91A0AC; --line:#25303A; --soft:#1A242C;
+    --accent:#45B9D3; --accent-ink:#04222B; --good:#5FD48D; --bad:#F2846F; --warn:#E9B65A; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D1216; --surface:#141B21; --ink:#E2E8ED; --muted:#91A0AC; --line:#25303A; --soft:#1A242C;
+  --accent:#45B9D3; --accent-ink:#04222B; --good:#5FD48D; --bad:#F2846F; --warn:#E9B65A; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:15px;line-height:1.5;-webkit-text-size-adjust:100%}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+a{color:var(--accent)}
+.wrap{max-width:1120px;margin:0 auto;padding-block:28px 72px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:22px}
+
+header{display:flex;flex-direction:column;gap:12px}
+.eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+h1{margin:0;font-size:clamp(32px,6vw,52px);line-height:1.02;font-weight:800;letter-spacing:-.025em;text-wrap:balance}
+.lede{margin:0;max-width:64ch;color:var(--muted)}
+.ua{font-family:var(--f-mono);font-size:12.5px;background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:6px;padding:10px 12px;overflow-wrap:anywhere;user-select:all}
+.ua b{font-weight:500;color:var(--muted);display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:2px;user-select:none}
+.actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.btn{font:600 14px/1 var(--f-ui);padding:11px 16px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.small{padding:8px 12px;font-size:13px}
+.btn:disabled{opacity:.6;cursor:progress}
+.btn:focus-visible,input:focus-visible,textarea:focus-visible,summary:focus-visible,.jump button:focus-visible,.seg button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.status{font-family:var(--f-mono);font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.note{font-size:13.5px;color:var(--muted);background:var(--soft);border-radius:8px;padding:10px 12px;max-width:84ch;margin:0}
+.note strong{color:var(--ink);font-weight:600}
+
+.sum{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+@media (max-width:900px){.sum{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:13px 14px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.tile .lab{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.tile .val{font-size:17px;font-weight:700;line-height:1.25;overflow-wrap:anywhere}
+.tile .sub{font-family:var(--f-mono);font-size:12px;color:var(--muted);overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:10px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--line)}
+.search{width:100%;font:15px var(--f-ui);padding:10px 12px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.jump{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.jump::-webkit-scrollbar{display:none}
+.jump button{flex:none;font:500 12.5px var(--f-ui);padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer;white-space:nowrap}
+.jump button:hover{color:var(--ink);border-color:var(--accent)}
+
+.secs{display:flex;flex-direction:column;gap:12px}
+details.sec{background:var(--surface);border:1px solid var(--line);border-radius:10px;scroll-margin-top:110px;min-width:0}
+details.sec>summary{list-style:none;cursor:pointer;padding:12px 14px;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}
+details.sec>summary::-webkit-details-marker{display:none}
+details.sec>summary::before{content:"▸";color:var(--muted);font-size:12px;transition:transform .15s}
+details.sec[open]>summary::before{transform:rotate(90deg)}
+.sec h2{margin:0;font-size:16px;font-weight:700}
+.sec .cnt{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.sec .tag{font:600 10.5px var(--f-ui);letter-spacing:.06em;text-transform:uppercase;color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:0 5px}
+.sec .hint{flex-basis:100%;font-size:13px;color:var(--muted);padding-left:18px}
+.row{display:grid;grid-template-columns:minmax(150px,34%) minmax(0,1fr);gap:14px;padding:7px 14px;border-top:1px solid var(--line)}
+.row .k{font-family:var(--f-mono);font-size:12.5px;color:var(--muted);overflow-wrap:anywhere;min-width:0}
+.row .v{font-family:var(--f-mono);font-size:13px;overflow-wrap:anywhere;min-width:0;font-variant-numeric:tabular-nums}
+@media (max-width:560px){.row{grid-template-columns:minmax(0,1fr);gap:1px}}
+.t{color:var(--good);font-weight:600}
+.f{color:var(--muted)}
+.i{font-style:italic}
+.e{color:var(--bad)}
+.w{color:var(--warn)}
+.list{display:flex;flex-wrap:wrap;gap:4px}
+.list span{background:var(--soft);border-radius:4px;padding:1px 6px;font-size:12px}
+img.fp{display:block;max-width:100%;border:1px solid var(--line);border-radius:4px;background:#fff}
+
+.acts{display:flex;flex-direction:column}
+.act{border-top:1px solid var(--line);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.act-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:8px 14px}
+.act-head>div{min-width:0;flex:1 1 280px}
+.act h3{margin:0;font-size:14.5px;font-weight:700}
+.act p{margin:2px 0 0;font-size:13px;color:var(--muted);max-width:70ch}
+.act-out .row{padding-inline:0}
+.act-out .row:first-child{border-top:1px dashed var(--line)}
+.sec .note{margin:0 14px 12px}
+
+.apis-head{display:flex;flex-wrap:wrap;gap:8px;padding:0 14px 10px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{font:500 12.5px var(--f-ui);padding:6px 10px;border:0;background:var(--surface);color:var(--muted);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;padding:12px 14px 14px;border-top:1px solid var(--line)}
+.chip{font-family:var(--f-mono);font-size:12px;padding:2px 8px;border-radius:5px;border:1px solid var(--line)}
+.chip.on{color:var(--good);border-color:var(--good)}
+.chip.off{color:var(--muted);text-decoration:line-through;opacity:.75}
+
+.cmp{display:flex;flex-direction:column;gap:10px;padding:12px 14px 14px;border-top:1px solid var(--line)}
+.cmp textarea,#raw{width:100%;min-height:120px;font:12px/1.45 var(--f-mono);padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);resize:vertical}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+.tbl table{border-collapse:collapse;width:100%;min-width:560px;font:12.5px var(--f-mono)}
+.tbl th,.tbl td{text-align:left;padding:6px 10px;border-top:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}
+.tbl th{border-top:0;font-family:var(--f-ui);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.tbl td:first-child{color:var(--muted);width:32%}
+.hidden-by-filter{display:none!important}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+<style>body{margin:0}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">diagnóstico do navegador · roda só no seu aparelho</span>
+    <h1>Raio-X do Navegador</h1>
+    <p class="lede">Lê tudo o que o navegador expõe para uma página: <code>navigator</code>, tela e taxa de atualização, CPU, GPU, codecs com aceleração por hardware, DRM, passkeys, teclado, rede, armazenamento, permissões, fontes, vozes, IA embutida e as interfaces da Web API do MDN. Os dados que precisam de autorização ficam em botões próprios.</p>
+    <div class="ua"><b>user-agent</b><span id="ua"></span></div>
+    <div class="actions">
+      <button class="btn primary" id="go" type="button">Coletar agora</button>
+      <button class="btn" id="copy" type="button">Copiar JSON</button>
+      <button class="btn" id="toAct" type="button">Dados com permissão</button>
+      <button class="btn" id="toCmp" type="button">Comparar aparelhos</button>
+      <span class="status" id="status">Aguardando a página carregar…</span>
+    </div>
+    <p class="note" id="envNote"></p>
+  </header>
+
+  <section class="sum" id="sum" aria-label="Resumo"></section>
+
+  <div class="bar">
+    <input class="search" id="q" type="search" placeholder="Filtrar por chave ou valor (ex.: gpu, hdr, widevine, ç, true)" autocomplete="off">
+    <nav class="jump" id="jump" aria-label="Seções"></nav>
+  </div>
+
+  <div class="secs" id="secs"></div>
+</div>
+
+<script>
+(() => {
+const NS = 'não suportado';
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const withTimeout = (p, ms = 4000) => Promise.race([p, new Promise((_, r) => setTimeout(() => r(new Error('tempo esgotado')), ms))]);
+const errText = e => (e && e.name && e.name !== 'Error' ? e.name + ': ' : '') + ((e && e.message) || String(e));
+const safe = async fn => { try { return await fn(); } catch (e) { return { __err: errText(e) || 'erro' }; } };
+const bytes = n => { if (n == null || isNaN(n)) return NS; const u = ['B','KB','MB','GB','TB']; let i = 0; while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; } return n.toFixed(i ? 1 : 0) + ' ' + u[i]; };
+const has = name => typeof window[name] !== 'undefined' || typeof window['webkit' + name] !== 'undefined';
+const hex4 = n => '0x' + Number(n).toString(16).padStart(4, '0');
+let FRAMED = false; try { FRAMED = window.top !== window.self; } catch (e) { FRAMED = true; }
+const IN_CLAUDE = /claudeusercontent\.com$/.test(location.hostname) || (location.ancestorOrigins && Array.from(location.ancestorOrigins).some(o => /claude\.ai$/.test(o)));
+async function sha(str) {
+  try {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 24);
+  } catch (e) {
+    let h = 0x811c9dc5; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return 'fnv-' + (h >>> 0).toString(16);
+  }
+}
+function explain(e) {
+  const n = e && e.name;
+  const frame = IN_CLAUDE ? ' Dentro do Claude isso é bloqueado; use a versão hospedada fora dele.' : '';
+  if (n === 'NotAllowedError') return 'Negado: você recusou o pedido ou a página não tem permissão.' + frame;
+  if (n === 'SecurityError') return 'Bloqueado pela política de permissões desta página.' + frame;
+  if (n === 'NotFoundError') return 'Nenhum dispositivo escolhido ou encontrado.';
+  if (n === 'NotReadableError') return 'O dispositivo está em uso por outro app.';
+  if (n === 'TypeError' && /fetch/i.test(e.message)) return 'A rede recusou a requisição.' + (IN_CLAUDE ? ' O Claude bloqueia conexões para outros sites dentro do artifact.' : '');
+  return errText(e) + frame;
+}
+
+/* ---------- describe arbitrary objects ---------- */
+function describe(v, depth) {
+  if (v === null || v === undefined) return v;
+  const t = typeof v;
+  if (t !== 'object') return t === 'function' ? undefined : v;
+  if (Array.isArray(v)) return v.map(x => describe(x, depth));
+  const tag = Object.prototype.toString.call(v).slice(8, -1);
+  if (typeof v.then === 'function') return '[Promise]';
+  if (typeof v.size === 'number' && typeof v.values === 'function' && typeof v.has === 'function' && typeof v.get !== 'function') return Array.from(v.values()).map(x => describe(x, depth + 1));
+  if (typeof v.length === 'number' && typeof v.item === 'function') return Array.from(v).map(x => (x && (x.name || x.type)) || String(x));
+  if (ArrayBuffer.isView(v)) return Array.from(v);
+  if (depth > 2) return '[' + tag + ']';
+  const o = {}; let n = 0;
+  for (const k in v) { let x; try { x = v[k]; } catch (e) { continue; } if (typeof x === 'function') continue; const d = describe(x, depth + 1); if (d === undefined) continue; o[k] = d; n++; }
+  return n ? o : '[' + tag + ']';
+}
+
+/* ---------- collectors ---------- */
+function navDump() {
+  const keys = []; for (const k in navigator) keys.push(k);
+  const out = {};
+  [...new Set(keys)].sort().forEach(k => {
+    try { const v = navigator[k]; if (typeof v === 'function') return; const d = describe(v, 0); if (d !== undefined) out[k] = d; }
+    catch (e) { out[k] = { __err: e.name }; }
+  });
+  return out;
+}
+
+async function clientHints() {
+  const u = navigator.userAgentData;
+  if (!u) return { status: NS + ' (Safari e Firefox não enviam Client Hints)' };
+  const h = await withTimeout(u.getHighEntropyValues(['architecture','bitness','formFactors','fullVersionList','model','platformVersion','uaFullVersion','wow64']));
+  return {
+    brands: u.brands.map(b => b.brand + ' ' + b.version), mobile: u.mobile, platform: u.platform,
+    architecture: h.architecture, bitness: h.bitness, formFactors: h.formFactors || NS, model: h.model || '(vazio — normal no desktop)',
+    platformVersion: h.platformVersion, uaFullVersion: h.uaFullVersion, wow64: h.wow64,
+    fullVersionList: (h.fullVersionList || []).map(b => b.brand + ' ' + b.version)
+  };
+}
+
+function navCaps() {
+  const list = ['bluetooth','usb','hid','serial','xr','gpu','ml','clipboard','credentials','geolocation','mediaDevices','mediaSession','mediaCapabilities','wakeLock','share','canShare','locks','storage','storageBuckets','serviceWorker','presentation','virtualKeyboard','ink','keyboard','managed','login','windowControlsOverlay','scheduling','contacts','setAppBadge','clearAppBadge','getGamepads','vibrate','requestMIDIAccess','requestMediaKeySystemAccess','sendBeacon','registerProtocolHandler','getInstalledRelatedApps','userActivation','permissions','connection','getBattery','deviceMemory','cpuPerformance','userAgentData','devicePosture','joinAdInterestGroup','runAdAuction','protectedAudience','preferences','standalone','globalPrivacyControl','pdfViewerEnabled','webdriver'];
+  const o = {};
+  list.forEach(k => {
+    if (!(k in navigator)) { o['navigator.' + k] = false; return; }
+    let v; try { v = navigator[k]; } catch (e) { v = undefined; }
+    o['navigator.' + k] = (v === null || ['boolean', 'number', 'string'].includes(typeof v)) ? 'existe · valor ' + v : true;
+  });
+  return o;
+}
+async function sysUI() {
+  const o = {};
+  const box = document.createElement('div');
+  box.style.cssText = 'position:absolute;left:-9999px;top:0;width:100px;height:100px;overflow:scroll';
+  document.body.appendChild(box);
+  const sb = box.offsetWidth - box.clientWidth;
+  o['largura da barra de rolagem'] = sb ? sb + ' px (barra clássica, típica de Windows e Linux)' : '0 px (barras sobrepostas: macOS, iOS, Android ou rolagem oculta)';
+  box.style.cssText = 'position:absolute;left:-9999px;top:0;font-size:medium';
+  const fs = getComputedStyle(box).fontSize;
+  o['tamanho de fonte padrão do navegador'] = fs + (fs === '16px' ? ' (padrão de fábrica)' : ' (alterado nas configurações)');
+  const sys = c => { box.style.color = ''; box.style.color = c; return box.style.color ? getComputedStyle(box).color : NS; };
+  o['cor de destaque do sistema (AccentColor)'] = sys('AccentColor');
+  o['cor de seleção do sistema (Highlight)'] = sys('Highlight');
+  box.remove();
+  const bait = document.createElement('div');
+  bait.className = 'adsbox ad-banner pub_300x250 textads banner-ads ad-placement sponsored-ad';
+  bait.style.cssText = 'position:absolute;left:-9999px;top:0;width:10px;height:10px';
+  bait.innerHTML = '&nbsp;';
+  document.body.appendChild(bait);
+  await new Promise(r => setTimeout(r, 200));
+  const bc = getComputedStyle(bait);
+  o['bloqueador de anúncios'] = (bait.offsetHeight === 0 || bc.display === 'none' || bc.visibility === 'hidden') ? 'provável (a isca de anúncio foi escondida)' : 'não detectado';
+  bait.remove();
+  o['navegador Brave'] = !!navigator.brave;
+  o['objeto window.chrome'] = 'chrome' in window;
+  o['webdriver (automação declarada)'] = !!navigator.webdriver;
+  o['Do Not Track'] = navigator.doNotTrack ?? 'não definido';
+  o['Global Privacy Control'] = navigator.globalPrivacyControl ?? NS;
+  if (document.hasStorageAccess) { try { o['acesso a cookies desta origem (hasStorageAccess)'] = await withTimeout(document.hasStorageAccess(), 2000); } catch (e) {} }
+  return o;
+}
+function consistency(res) {
+  const o = {}, ua = navigator.userAgent, R = res.clienthints || {};
+  const ok = (cond, good, bad) => cond ? '✓ ' + good : '✗ ' + bad;
+  const uaOS = /Windows/.test(ua) ? 'Windows' : /iPhone|iPad|iPod/.test(ua) ? 'iOS' : /Android/.test(ua) ? 'Android' : /Mac OS X/.test(ua) ? 'macOS' : /CrOS/.test(ua) ? 'Chrome OS' : /Linux/.test(ua) ? 'Linux' : '?';
+  const p = navigator.platform || '';
+  const platOS = /^Win/.test(p) ? 'Windows' : /iPhone|iPad|iPod/.test(p) ? 'iOS' : /^Mac/.test(p) ? 'macOS' : /Linux|Android/.test(p) ? (uaOS === 'Android' ? 'Android' : 'Linux') : '?';
+  o['sistema: user-agent × navigator.platform'] = ok(uaOS === platOS || (uaOS === 'iOS' && platOS === 'macOS') || (uaOS === 'Chrome OS' && platOS === 'Linux'), `${uaOS} nos dois`, `user-agent diz ${uaOS}, platform diz "${p}"`);
+  if (R.platform) o['sistema: user-agent × Client Hints'] = ok(R.platform === uaOS, `${uaOS} nos dois`, `user-agent diz ${uaOS}, Client Hints diz ${R.platform}`);
+  const uaVer = (ua.match(/Chrome\/(\d+)/) || [])[1];
+  if (uaVer && R.uaFullVersion) o['versão: user-agent × Client Hints'] = ok(R.uaFullVersion.split('.')[0] === uaVer, 'versão ' + uaVer + ' nos dois', `user-agent ${uaVer}, Client Hints ${R.uaFullVersion}`);
+  const gl = String((res.webgl || {})['GPU renderer (real)'] || '');
+  if (gl) {
+    const soft = /SwiftShader|llvmpipe|softpipe|Basic Render/i.test(gl);
+    const mismatch = (/Apple/.test(gl) && uaOS === 'Windows') || (/Direct3D|D3D/.test(gl) && uaOS !== 'Windows');
+    o['GPU × sistema'] = ok(!soft && !mismatch, 'placa de vídeo compatível com ' + uaOS, soft ? 'renderização por software (VM, servidor remoto ou GPU desativada)' : 'placa de vídeo não combina com o sistema informado');
+  }
+  const il = Intl.DateTimeFormat().resolvedOptions().locale;
+  o['idioma: navigator × Intl'] = ok(il.split('-')[0] === (navigator.language || '').split('-')[0], navigator.language + ' e ' + il, `navigator.language ${navigator.language}, Intl ${il}`);
+  o['webdriver'] = ok(!navigator.webdriver, 'false (sem automação declarada)', 'true (navegador controlado por automação)');
+  o['user-agent headless'] = ok(!/Headless/i.test(ua), 'não aparece "Headless"', 'HeadlessChrome no user-agent');
+  o['janela com tamanho real'] = ok(outerWidth > 0 && outerHeight > 0, `${outerWidth} × ${outerHeight}`, 'outerWidth 0 (típico de navegador sem janela)');
+  o['área útil × tela'] = ok(screen.availWidth <= screen.width && screen.availHeight <= screen.height, 'área útil dentro da tela', 'área útil maior que a tela (valores inventados)');
+  o['plugins de PDF'] = ok(!/Chrome\//.test(ua) || /Mobile/.test(ua) || (navigator.plugins && navigator.plugins.length > 0), (navigator.plugins || []).length + ' plugins', 'Chrome de desktop sem plugins (comum em headless)');
+  const np = (res.permissoes || {}).notifications;
+  if (window.Notification && np && !FRAMED) o['notificação: Permissions × Notification'] = ok(!(Notification.permission === 'denied' && np === 'prompt'), 'coerentes', 'denied × prompt (assinatura clássica de headless)');
+  const tierCores = navigator.cpuPerformance, hc = navigator.hardwareConcurrency;
+  if (tierCores !== undefined && hc) o['núcleos × nível de CPU'] = ok(!(hc > 10 && tierCores < 4 && tierCores !== 0), `${hc} threads e nível ${tierCores}`, `${hc} threads deveriam dar nível 4, veio ${tierCores}`);
+  o['fuso do IP × fuso do sistema'] = 'rode IP público em Dados com permissão';
+  const bad = Object.values(o).filter(v => typeof v === 'string' && v.startsWith('✗')).length;
+  o['resultado'] = bad ? `✗ ${bad} inconsistência(s)` : '✓ nenhuma inconsistência';
+  return o;
+}
+
+function refreshRate() {
+  return new Promise(res => {
+    if (document.visibilityState !== 'visible') return res({ 'taxa de atualização': 'aba em segundo plano, clique em Coletar de novo com a aba visível' });
+    const ts = []; let finished = false;
+    const done = () => {
+      if (finished) return; finished = true;
+      if (ts.length < 10) return res({ 'taxa de atualização': 'poucos quadros desenhados' });
+      const d = []; for (let i = 1; i < ts.length; i++) d.push(ts[i] - ts[i - 1]);
+      d.sort((a, b) => a - b);
+      const med = d[Math.floor(d.length / 2)], hz = 1000 / med;
+      const common = [24,30,48,50,60,72,75,85,90,100,110,120,138,144,155,160,165,170,175,180,200,240,280,300,360,390,480,500,540];
+      const near = common.reduce((a, b) => Math.abs(b - hz) < Math.abs(a - hz) ? b : a);
+      res({ 'taxa de atualização medida (Hz)': hz.toFixed(1), 'taxa provável (Hz)': near, 'quadros amostrados': ts.length, 'intervalo mediano (ms)': med.toFixed(3) });
+    };
+    const f = t => { ts.push(t); if (ts.length < 150 && t - ts[0] < 1200) requestAnimationFrame(f); else done(); };
+    requestAnimationFrame(f); setTimeout(done, 2500);
+  });
+}
+function mq(name, vals) {
+  for (const v of vals) { if (matchMedia(`(${name}: ${v})`).matches) return v; }
+  return matchMedia(`(${name})`).matches ? 'sim' : 'sem correspondência';
+}
+async function screenInfo() {
+  const dpr = window.devicePixelRatio || 1, s = screen, vv = window.visualViewport, or = s.orientation;
+  const o = {
+    'screen.width × height (CSS px)': s.width + ' × ' + s.height,
+    'resolução física estimada': Math.round(s.width * dpr) + ' × ' + Math.round(s.height * dpr),
+    'availWidth × availHeight': s.availWidth + ' × ' + s.availHeight,
+    'barra de tarefas/dock (px)': (s.height - s.availHeight) + ' na vertical · ' + (s.width - s.availWidth) + ' na horizontal',
+    devicePixelRatio: dpr, colorDepth: s.colorDepth, pixelDepth: s.pixelDepth,
+    'orientation.type': or ? or.type : NS, 'orientation.angle': or ? or.angle : (window.orientation ?? NS),
+    'screen.isExtended (vários monitores)': 'isExtended' in s ? s.isExtended : NS,
+    'innerWidth × innerHeight': innerWidth + ' × ' + innerHeight,
+    'outerWidth × outerHeight': outerWidth + ' × ' + outerHeight,
+    'screenX, screenY': screenX + ', ' + screenY,
+    'visualViewport': vv ? `${Math.round(vv.width)} × ${Math.round(vv.height)} · escala ${vv.scale}` : NS,
+    maxTouchPoints: navigator.maxTouchPoints, 'ontouchstart': 'ontouchstart' in window,
+    'document.fullscreenEnabled': !!(document.fullscreenEnabled || document.webkitFullscreenEnabled),
+    'document.pictureInPictureEnabled': !!document.pictureInPictureEnabled
+  };
+  Object.assign(o, await refreshRate());
+  const iOS = /iPhone|iPod/.test(navigator.userAgent);
+  if (iOS) {
+    const w = Math.min(s.width, s.height), h = Math.max(s.width, s.height);
+    const T = { '320x568@2': 'iPhone SE (1ª) ou 5/5s', '375x667@2': 'iPhone 6/6s/7/8 ou SE (2ª/3ª)', '414x736@3': 'iPhone 6/6s/7/8 Plus', '375x812@3': 'iPhone X, XS, 11 Pro, 12 mini ou 13 mini', '414x896@2': 'iPhone XR ou 11', '414x896@3': 'iPhone XS Max ou 11 Pro Max', '390x844@3': 'iPhone 12, 12 Pro, 13, 13 Pro, 14 ou 16e', '428x926@3': 'iPhone 12 Pro Max, 13 Pro Max ou 14 Plus', '393x852@3': 'iPhone 14 Pro, 15, 15 Pro ou 16', '430x932@3': 'iPhone 14 Pro Max, 15 Plus, 15 Pro Max ou 16 Plus', '402x874@3': 'iPhone 16 Pro, 17 ou 17 Pro', '420x912@3': 'iPhone Air', '440x956@3': 'iPhone 16 Pro Max ou 17 Pro Max' };
+    o['modelo provável (pelo tamanho da tela)'] = T[`${w}x${h}@${dpr}`] || 'tamanho não catalogado (zoom de tela ativado?)';
+    if (Number(o['taxa provável (Hz)']) <= 30) o['por que 30 Hz?'] = 'o iOS corta a animação para 30 quadros no Modo de Pouca Energia e em quadros de outro site (iframe) antes de você tocar na página. Toque na página e clique em Coletar de novo.';
+  }
+  return o;
+}
+function mediaQueries() {
+  return {
+    'prefers-color-scheme': mq('prefers-color-scheme', ['dark','light']),
+    'prefers-reduced-motion': mq('prefers-reduced-motion', ['reduce','no-preference']),
+    'prefers-contrast': mq('prefers-contrast', ['more','less','custom','no-preference']),
+    'prefers-reduced-transparency': mq('prefers-reduced-transparency', ['reduce','no-preference']),
+    'prefers-reduced-data': mq('prefers-reduced-data', ['reduce','no-preference']),
+    'pointer': mq('pointer', ['fine','coarse','none']), 'any-pointer': mq('any-pointer', ['fine','coarse','none']),
+    'hover': mq('hover', ['hover','none']), 'any-hover': mq('any-hover', ['hover','none']),
+    'color-gamut': mq('color-gamut', ['rec2020','p3','srgb']),
+    'dynamic-range (HDR)': mq('dynamic-range', ['high','standard']),
+    'video-dynamic-range': mq('video-dynamic-range', ['high','standard']),
+    'forced-colors': mq('forced-colors', ['active','none']),
+    'inverted-colors': mq('inverted-colors', ['inverted','none']),
+    'display-mode': mq('display-mode', ['standalone','fullscreen','minimal-ui','browser','window-controls-overlay','picture-in-picture']),
+    'orientation': mq('orientation', ['portrait','landscape']),
+    'update': mq('update', ['fast','slow','none']),
+    'scripting': mq('scripting', ['enabled','initial-only','none']),
+    'monochrome': matchMedia('(monochrome)').matches
+  };
+}
+function locale() {
+  const r = Intl.DateTimeFormat().resolvedOptions();
+  const off = -new Date().getTimezoneOffset() / 60;
+  let hc; try { hc = new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).resolvedOptions().hourCycle; } catch (e) { hc = NS; }
+  const o = {
+    'navigator.language': navigator.language, 'navigator.languages': navigator.languages,
+    'Intl.locale': r.locale, timeZone: r.timeZone, 'UTC offset': 'UTC' + (off >= 0 ? '+' : '') + off,
+    calendar: r.calendar, numberingSystem: r.numberingSystem, hourCycle: hc || '(padrão)',
+    'data/hora local': new Date().toLocaleString(), 'Date.toString()': new Date().toString(),
+    'número formatado': (1234567.891).toLocaleString(),
+    'moeda (BRL)': (1234.5).toLocaleString(undefined, { style: 'currency', currency: 'BRL' })
+  };
+  try {
+    const L = new Intl.Locale(navigator.language).maximize();
+    o['região do idioma'] = L.region + ' · ' + new Intl.DisplayNames([navigator.language], { type: 'region' }).of(L.region);
+    o['escrita do idioma'] = L.script;
+    const wi = L.getWeekInfo ? L.getWeekInfo() : L.weekInfo;
+    if (wi) { const dn = ['', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom']; o['semana começa em'] = dn[wi.firstDay]; o['fim de semana'] = (wi.weekend || []).map(d => dn[d]).join(', '); }
+  } catch (e) {}
+  if (Intl.supportedValuesOf) {
+    ['timeZone', 'calendar', 'currency', 'collation', 'numberingSystem', 'unit'].forEach(k => { try { o['Intl conhece · ' + k] = Intl.supportedValuesOf(k).length; } catch (e) {} });
+  }
+  return o;
+}
+let glSummary = {};
+function webgl() {
+  const c = document.createElement('canvas');
+  const g = c.getContext('webgl2') || c.getContext('webgl') || c.getContext('experimental-webgl');
+  if (!g) return { status: NS };
+  const P = x => { try { const v = g.getParameter(x); return v && ArrayBuffer.isView(v) ? Array.from(v) : v; } catch (e) { return null; } };
+  const dbg = g.getExtension('WEBGL_debug_renderer_info');
+  const exts = (g.getSupportedExtensions() || []).slice().sort();
+  const isGL2 = typeof WebGL2RenderingContext !== 'undefined' && g instanceof WebGL2RenderingContext;
+  const o = {
+    contexto: isGL2 ? 'webgl2' : 'webgl', vendor: P(g.VENDOR), renderer: P(g.RENDERER),
+    'GPU vendor (real)': dbg ? P(dbg.UNMASKED_VENDOR_WEBGL) : NS, 'GPU renderer (real)': dbg ? P(dbg.UNMASKED_RENDERER_WEBGL) : NS,
+    version: P(g.VERSION), 'shading language': P(g.SHADING_LANGUAGE_VERSION),
+    MAX_TEXTURE_SIZE: P(g.MAX_TEXTURE_SIZE), MAX_RENDERBUFFER_SIZE: P(g.MAX_RENDERBUFFER_SIZE), MAX_VIEWPORT_DIMS: P(g.MAX_VIEWPORT_DIMS),
+    MAX_VERTEX_ATTRIBS: P(g.MAX_VERTEX_ATTRIBS), MAX_TEXTURE_IMAGE_UNITS: P(g.MAX_TEXTURE_IMAGE_UNITS),
+    MAX_COMBINED_TEXTURE_IMAGE_UNITS: P(g.MAX_COMBINED_TEXTURE_IMAGE_UNITS), MAX_VARYING_VECTORS: P(g.MAX_VARYING_VECTORS),
+    MAX_VERTEX_UNIFORM_VECTORS: P(g.MAX_VERTEX_UNIFORM_VECTORS), MAX_FRAGMENT_UNIFORM_VECTORS: P(g.MAX_FRAGMENT_UNIFORM_VECTORS),
+    ALIASED_LINE_WIDTH_RANGE: P(g.ALIASED_LINE_WIDTH_RANGE), ALIASED_POINT_SIZE_RANGE: P(g.ALIASED_POINT_SIZE_RANGE),
+    antialias: (g.getContextAttributes() || {}).antialias
+  };
+  const rend = String(o['GPU renderer (real)'] || '');
+  const m = rend.match(/ANGLE \(([^,]+), (.+?) \((0x[0-9A-Fa-f]+)\)/) || rend.match(/ANGLE \(([^,]+), (.+?)(?: Direct3D| vs_|,|\))/);
+  if (m) { o['GPU · modelo'] = m[2].trim(); if (m[3]) o['GPU · device id PCI'] = m[3]; }
+  const api = rend.match(/(Direct3D11|Direct3D9|D3D11|D3D12|Vulkan|OpenGL|Metal)/i); if (api) o['GPU · API usada pelo navegador'] = api[1];
+  const ani = g.getExtension('EXT_texture_filter_anisotropic') || g.getExtension('WEBKIT_EXT_texture_filter_anisotropic');
+  if (ani) o.MAX_TEXTURE_MAX_ANISOTROPY = P(ani.MAX_TEXTURE_MAX_ANISOTROPY_EXT);
+  if (isGL2) { o.MAX_SAMPLES = P(g.MAX_SAMPLES); o.MAX_3D_TEXTURE_SIZE = P(g.MAX_3D_TEXTURE_SIZE); o.MAX_DRAW_BUFFERS = P(g.MAX_DRAW_BUFFERS); o.MAX_ARRAY_TEXTURE_LAYERS = P(g.MAX_ARRAY_TEXTURE_LAYERS); o.MAX_UNIFORM_BLOCK_SIZE = P(g.MAX_UNIFORM_BLOCK_SIZE); }
+  ['VERTEX_SHADER', 'FRAGMENT_SHADER'].forEach(s => ['HIGH_FLOAT', 'MEDIUM_FLOAT', 'HIGH_INT'].forEach(p => {
+    try { const f = g.getShaderPrecisionFormat(g[s], g[p]); if (f) o[`precisão · ${s} ${p} (min/max/bits)`] = `${f.rangeMin}/${f.rangeMax}/${f.precision}`; } catch (e) {}
+  }));
+  o['extensões (qtd)'] = exts.length; o['extensões'] = exts;
+  glSummary = { vendor: o['GPU vendor (real)'], renderer: o['GPU renderer (real)'], model: o['GPU · modelo'] };
+  try { const lc = g.getExtension('WEBGL_lose_context'); lc && lc.loseContext(); } catch (e) {}
+  return o;
+}
+let gpuSummary = {};
+async function webgpu() {
+  if (!navigator.gpu) return { status: NS + ' (Safari 26+, Chrome 113+)' };
+  const a = await withTimeout(navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }));
+  if (!a) return { status: 'API existe, mas nenhum adaptador disponível' };
+  const info = a.info || (a.requestAdapterInfo ? await a.requestAdapterInfo() : {});
+  const lim = {}; for (const k in a.limits) lim[k] = a.limits[k];
+  gpuSummary = { vendor: info.vendor, arch: info.architecture, desc: info.description };
+  const o = {
+    vendor: info.vendor || '(vazio)', architecture: info.architecture || '(vazio)',
+    device: info.device || '(vazio — o Chrome esconde por privacidade)', description: info.description || '(vazio — o Chrome esconde por privacidade)',
+    'subgroup size (min–max)': info.subgroupMinSize ? info.subgroupMinSize + '–' + info.subgroupMaxSize : NS,
+    isFallbackAdapter: a.isFallbackAdapter ?? info.isFallbackAdapter ?? NS,
+    preferredCanvasFormat: navigator.gpu.getPreferredCanvasFormat ? navigator.gpu.getPreferredCanvasFormat() : NS,
+    'WGSL features': navigator.gpu.wgslLanguageFeatures ? [...navigator.gpu.wgslLanguageFeatures].sort() : NS,
+    features: [...a.features].sort()
+  };
+  try {
+    const lp = await withTimeout(navigator.gpu.requestAdapter({ powerPreference: 'low-power' }), 3000);
+    const li = lp && (lp.info || {});
+    o['GPU de economia de energia'] = lp ? `${li.vendor || '?'} ${li.architecture || ''}`.trim() + ((li.vendor === info.vendor && li.architecture === info.architecture) ? ' (mesma GPU)' : ' (GPU diferente: notebook com duas placas)') : 'nenhuma';
+  } catch (e) {}
+  o.limits = lim;
+  return o;
+}
+let audioHash = '';
+async function audio() {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return { status: NS };
+  const ctx = new AC();
+  const o = {
+    sampleRate: ctx.sampleRate, baseLatency: ctx.baseLatency ?? NS, outputLatency: ctx.outputLatency ?? NS,
+    'destination.maxChannelCount (canais de saída)': ctx.destination.maxChannelCount, 'destination.channelCount': ctx.destination.channelCount,
+    state: ctx.state, 'setSinkId (escolher saída)': 'setSinkId' in ctx
+  };
+  try { ctx.close(); } catch (e) {}
+  const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  if (OAC) {
+    try {
+      const oc = new OAC(1, 5000, 44100), osc = oc.createOscillator(), comp = oc.createDynamicsCompressor();
+      osc.type = 'triangle'; osc.frequency.value = 10000;
+      [['threshold', -50], ['knee', 40], ['ratio', 12], ['attack', 0], ['release', .25]].forEach(([k, v]) => { if (comp[k]) comp[k].value = v; });
+      osc.connect(comp); comp.connect(oc.destination); osc.start(0);
+      const buf = await withTimeout(new Promise((res, rej) => { const p = oc.startRendering(); if (p && p.then) p.then(res, rej); else oc.oncomplete = e => res(e.renderedBuffer); }));
+      const d = buf.getChannelData(0); let s = 0; for (let i = 4500; i < 5000; i++) s += Math.abs(d[i]);
+      audioHash = s.toFixed(12); o['impressão de áudio (soma do sinal)'] = audioHash;
+    } catch (e) { o['impressão de áudio'] = { __err: e.message }; }
+  }
+  return o;
+}
+async function decInfo(cfg) {
+  try {
+    const r = await withTimeout(navigator.mediaCapabilities.decodingInfo(cfg), 3000);
+    return r.supported ? `suportado${r.smooth ? ' · fluido' : ' · com engasgos'}${r.powerEfficient ? ' · por hardware' : ' · por software'}` : 'não';
+  } catch (e) { return 'não (' + (e.name || e.message) + ')'; }
+}
+async function media() {
+  const o = {}, v = document.createElement('video'), a = document.createElement('audio');
+  const vc = { 'H.264 / AVC': 'video/mp4; codecs="avc1.42E01E"', 'H.265 / HEVC': 'video/mp4; codecs="hvc1.1.6.L93.B0"', 'VP8': 'video/webm; codecs="vp8"', 'VP9': 'video/webm; codecs="vp9"', 'AV1': 'video/mp4; codecs="av01.0.05M.08"', 'Dolby Vision': 'video/mp4; codecs="dvh1.05.06"', 'Theora': 'video/ogg; codecs="theora"', 'HLS nativo (m3u8)': 'application/vnd.apple.mpegurl' };
+  const ac = { 'AAC': 'audio/mp4; codecs="mp4a.40.2"', 'MP3': 'audio/mpeg', 'Opus (ogg)': 'audio/ogg; codecs="opus"', 'Opus (webm)': 'audio/webm; codecs="opus"', 'Vorbis': 'audio/ogg; codecs="vorbis"', 'FLAC': 'audio/flac', 'WAV': 'audio/wav', 'ALAC': 'audio/mp4; codecs="alac"', 'Dolby Digital (AC-3)': 'audio/mp4; codecs="ac-3"', 'Dolby Digital Plus (E-AC-3)': 'audio/mp4; codecs="ec-3"' };
+  for (const [k, t] of Object.entries(vc)) o['tocar vídeo · ' + k] = v.canPlayType(t) || 'não';
+  for (const [k, t] of Object.entries(ac)) o['tocar áudio · ' + k] = a.canPlayType(t) || 'não';
+  const MS = window.MediaSource || window.ManagedMediaSource;
+  o['MediaSource (streaming MSE)'] = window.MediaSource ? 'MediaSource' : window.ManagedMediaSource ? 'ManagedMediaSource (iOS)' : NS;
+  if (window.MediaRecorder && MediaRecorder.isTypeSupported) {
+    o['MediaRecorder grava'] = ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm;codecs=av1','video/mp4;codecs=avc1','video/mp4;codecs=hvc1','video/mp4','audio/webm;codecs=opus','audio/mp4','audio/ogg;codecs=opus'].filter(t => MediaRecorder.isTypeSupported(t));
+  } else o['MediaRecorder'] = NS;
+  if (navigator.mediaCapabilities && navigator.mediaCapabilities.decodingInfo) {
+    const type = MS ? 'media-source' : 'file';
+    const cfgs = {
+      'H.264 1080p': { contentType: 'video/mp4; codecs="avc1.640028"', width: 1920, height: 1080 },
+      'HEVC 4K': { contentType: 'video/mp4; codecs="hvc1.1.6.L153.B0"', width: 3840, height: 2160 },
+      'VP9 4K': { contentType: 'video/webm; codecs="vp09.00.51.08"', width: 3840, height: 2160 },
+      'AV1 4K': { contentType: 'video/mp4; codecs="av01.0.12M.08"', width: 3840, height: 2160 },
+      'AV1 8K': { contentType: 'video/mp4; codecs="av01.0.16M.08"', width: 7680, height: 4320 },
+      'HDR10 4K (HEVC PQ)': { contentType: 'video/mp4; codecs="hvc1.2.4.L153.B0"', width: 3840, height: 2160, hdrMetadataType: 'smpteSt2086', colorGamut: 'rec2020', transferFunction: 'pq' },
+      'HDR 4K (VP9 PQ)': { contentType: 'video/webm; codecs="vp09.02.51.10.01.09.16.09.00"', width: 3840, height: 2160, hdrMetadataType: 'smpteSt2086', colorGamut: 'rec2020', transferFunction: 'pq' },
+      'Dolby Vision 4K': { contentType: 'video/mp4; codecs="dvh1.05.06"', width: 3840, height: 2160, colorGamut: 'rec2020', transferFunction: 'pq' }
+    };
+    const entries = await Promise.all(Object.entries(cfgs).map(async ([k, vcfg]) => [k, await decInfo({ type, video: { bitrate: 20e6, framerate: 30, ...vcfg } })]));
+    entries.forEach(([k, r]) => o['decodificação · ' + k] = r);
+    o['áudio espacial · Dolby Atmos (E-AC-3 JOC)'] = await decInfo({ type, audio: { contentType: 'audio/mp4; codecs="ec-3"', channels: '16', bitrate: 768000, samplerate: 48000, spatialRendering: true } });
+  }
+  if (navigator.mediaDevices) {
+    o['getUserMedia'] = !!navigator.mediaDevices.getUserMedia;
+    o['getDisplayMedia (compartilhar tela)'] = !!navigator.mediaDevices.getDisplayMedia;
+    try {
+      const d = await withTimeout(navigator.mediaDevices.enumerateDevices(), 3000);
+      const c = {}; d.forEach(x => c[x.kind] = (c[x.kind] || 0) + 1);
+      o['dispositivos visíveis'] = Object.keys(c).length ? Object.entries(c).map(([k, n]) => k + ': ' + n).join(' · ') : 'nenhum (bloqueado no quadro)';
+      o['nomes dos dispositivos'] = d.some(x => x.label) ? d.map(x => x.label) : 'ocultos até você liberar câmera/microfone (botão em Dados com permissão)';
+    } catch (e) { o['dispositivos visíveis'] = { __err: e.message }; }
+    try { o['constraints suportadas'] = Object.keys(navigator.mediaDevices.getSupportedConstraints()).sort(); } catch (e) {}
+  } else o['mediaDevices'] = NS;
+  return o;
+}
+async function webcodecs() {
+  if (typeof VideoEncoder === 'undefined' && typeof VideoDecoder === 'undefined') return { status: NS };
+  const vids = [['H.264', 'avc1.640028'], ['HEVC', 'hvc1.1.6.L120.90'], ['VP8', 'vp8'], ['VP9', 'vp09.00.40.08'], ['AV1', 'av01.0.08M.08']];
+  const test = async (cls, cfg) => { if (typeof cls === 'undefined') return false; try { const r = await withTimeout(cls.isConfigSupported(cfg), 3000); return !!r.supported; } catch (e) { return false; } };
+  const label = (hw, sw) => hw && sw ? 'hardware e software' : hw ? 'só hardware' : sw ? 'só software' : 'não';
+  const o = {};
+  const rows = await Promise.all(vids.map(async ([n, c]) => {
+    const ec = { codec: c, width: 1920, height: 1080, bitrate: 8e6, framerate: 30 };
+    const dc = { codec: c, codedWidth: 1920, codedHeight: 1080 };
+    const [eh, es, dh, ds] = await Promise.all([
+      test(window.VideoEncoder, { ...ec, hardwareAcceleration: 'prefer-hardware' }), test(window.VideoEncoder, { ...ec, hardwareAcceleration: 'prefer-software' }),
+      test(window.VideoDecoder, { ...dc, hardwareAcceleration: 'prefer-hardware' }), test(window.VideoDecoder, { ...dc, hardwareAcceleration: 'prefer-software' })
+    ]);
+    return [n, label(eh, es), label(dh, ds)];
+  }));
+  rows.forEach(([n, e, d]) => { o['codificar vídeo · ' + n + ' 1080p'] = e; o['decodificar vídeo · ' + n + ' 1080p'] = d; });
+  const auds = [['Opus', 'opus'], ['AAC', 'mp4a.40.2'], ['FLAC', 'flac'], ['MP3', 'mp3']];
+  const ar = await Promise.all(auds.map(async ([n, c]) => [n, await test(window.AudioEncoder, { codec: c, sampleRate: 48000, numberOfChannels: 2, bitrate: 128000 }), await test(window.AudioDecoder, { codec: c, sampleRate: 48000, numberOfChannels: 2 })]));
+  ar.forEach(([n, e, d]) => { o['codificar áudio · ' + n] = e; o['decodificar áudio · ' + n] = d; });
+  o['ImageDecoder'] = typeof ImageDecoder !== 'undefined';
+  if (typeof ImageDecoder !== 'undefined') {
+    const im = await Promise.all(['image/avif', 'image/webp', 'image/jxl', 'image/heic', 'image/gif', 'image/png', 'image/jpeg'].map(async t => [t, await ImageDecoder.isTypeSupported(t).catch(() => false)]));
+    o['ImageDecoder aceita'] = im.filter(x => x[1]).map(x => x[0].replace('image/', ''));
+  }
+  return o;
+}
+async function drm() {
+  if (!navigator.requestMediaKeySystemAccess) return { status: NS };
+  const vid = 'video/mp4; codecs="avc1.42E01E"';
+  const tryKS = async (id, extra = {}, init = ['cenc']) => {
+    try { await withTimeout(navigator.requestMediaKeySystemAccess(id, [{ initDataTypes: init, videoCapabilities: [{ contentType: vid, ...extra }] }]), 3000); return true; }
+    catch (e) { return e.name === 'SecurityError' ? 'blocked' : false; }
+  };
+  const out = v => v === true ? true : v === 'blocked' ? 'bloqueado neste quadro (política encrypted-media)' : 'não';
+  const o = {};
+  const [wv, wvL1, wvL3, pr, pr3000, pr2000, fp, fp1, ck] = await Promise.all([
+    tryKS('com.widevine.alpha'), tryKS('com.widevine.alpha', { robustness: 'HW_SECURE_ALL' }), tryKS('com.widevine.alpha', { robustness: 'SW_SECURE_DECODE' }),
+    tryKS('com.microsoft.playready.recommendation'), tryKS('com.microsoft.playready.recommendation.3000'), tryKS('com.microsoft.playready.recommendation', { robustness: '2000' }),
+    tryKS('com.apple.fps', {}, ['sinf']), tryKS('com.apple.fps.1_0', {}, ['skd']), tryKS('org.w3.clearkey', {}, ['cenc', 'keyids'])
+  ]);
+  o['Widevine (Google)'] = out(wv);
+  o['Widevine · nível'] = wv === 'blocked' ? out(wv) : wvL1 === true ? 'L1 por hardware (HD/4K liberado em streaming)' : wvL3 === true || wv === true ? 'L3 por software (streaming costuma limitar a 720p)' : 'não';
+  o['PlayReady (Microsoft)'] = out(pr);
+  o['PlayReady SL3000 (hardware, 4K na Netflix/Prime no Edge)'] = out(pr3000);
+  o['PlayReady SL2000 (software)'] = out(pr2000);
+  o['FairPlay (Apple)'] = fp === true || fp1 === true ? true : out(fp);
+  o['ClearKey'] = out(ck);
+  return o;
+}
+async function webauthn() {
+  if (!window.PublicKeyCredential) return { status: NS };
+  const o = {};
+  try { o['autenticador do aparelho (Windows Hello / Face ID / Touch ID / digital)'] = await withTimeout(PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()); } catch (e) { o['autenticador do aparelho'] = { __err: errText(e) }; }
+  if (PublicKeyCredential.isConditionalMediationAvailable) { try { o['passkeys no autopreenchimento'] = await withTimeout(PublicKeyCredential.isConditionalMediationAvailable()); } catch (e) {} }
+  if (PublicKeyCredential.getClientCapabilities) {
+    try { const c = await withTimeout(PublicKeyCredential.getClientCapabilities()); Object.keys(c).sort().forEach(k => o['capacidade · ' + k] = c[k]); }
+    catch (e) { o['getClientCapabilities'] = { __err: errText(e) }; }
+  } else o['getClientCapabilities'] = NS + ' (Chrome 133+, Safari 17.4+, Firefox 135+)';
+  o['PasswordCredential (gerenciador de senhas)'] = typeof PasswordCredential !== 'undefined';
+  o['FedCM · IdentityCredential (login com Google sem pop-up)'] = typeof IdentityCredential !== 'undefined';
+  o['DigitalCredential (documentos digitais, ex. CNH)'] = typeof DigitalCredential !== 'undefined';
+  return o;
+}
+async function keyboard() {
+  if (!navigator.keyboard || !navigator.keyboard.getLayoutMap) return { status: NS + ' (só Chrome/Edge no desktop)' };
+  const m = await withTimeout(navigator.keyboard.getLayoutMap());
+  const g = k => m.get(k);
+  let fam = 'desconhecido';
+  if (g('KeyQ') === 'a' && g('KeyW') === 'z') fam = 'AZERTY';
+  else if (g('KeyY') === 'z' && g('KeyZ') === 'y') fam = 'QWERTZ';
+  else if (g('KeyQ') === "'" && g('KeyW') === ',') fam = 'Dvorak';
+  else if (g('KeyQ') === 'q' && g('KeyW') === 'w') fam = 'QWERTY';
+  let variant = '';
+  if (g('Semicolon') === 'ç') variant = g('IntlRo') ? ' · ABNT2 (Brasil)' : ' · com Ç (ABNT ou Portugal)';
+  else if (g('Semicolon') === 'ñ') variant = ' · Espanhol';
+  else if (g('Semicolon') === ';' && fam === 'QWERTY') variant = ' · US';
+  const all = []; m.forEach((v, k) => all.push(k + ' → ' + v)); all.sort();
+  return { 'layout detectado': fam + variant, 'tecla ;  (Semicolon)': g('Semicolon'), "tecla ' (Quote)": g('Quote'), 'tecla [ (BracketLeft)': g('BracketLeft'), 'tecla IntlRo (/ do ABNT2)': g('IntlRo') || '(não existe)', 'teclas mapeadas': m.size, 'mapa completo': all };
+}
+function gamepads() {
+  if (!navigator.getGamepads) return { status: NS };
+  let pads; try { pads = Array.from(navigator.getGamepads()).filter(Boolean); } catch (e) { return { status: 'bloqueado (' + e.name + ')' }; }
+  if (!pads.length) return { status: 'nenhum controle visível. Conecte, aperte qualquer botão e clique em Coletar de novo.' };
+  const o = {}; pads.forEach((p, i) => { o[`controle ${i + 1}`] = p.id; o[`controle ${i + 1} · botões/eixos`] = p.buttons.length + ' / ' + p.axes.length; o[`controle ${i + 1} · mapeamento`] = p.mapping || '(próprio)'; o[`controle ${i + 1} · vibração`] = !!p.vibrationActuator; });
+  return o;
+}
+function network() {
+  const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  const o = { onLine: navigator.onLine };
+  if (!c) o.connection = NS + ' (Safari e Firefox escondem o tipo de rede)';
+  else {
+    ['effectiveType', 'type', 'downlinkMax', 'saveData'].forEach(k => { if (k in c) o['connection.' + k] = c[k]; });
+    if ('downlink' in c) o['connection.downlink'] = c.downlink + ' Mbps (estimado; o Chrome limita em 10)';
+    if ('rtt' in c) o['connection.rtt'] = c.rtt + ' ms (estimado, múltiplo de 25; 0 = sem medição ainda)';
+  }
+  o['WebRTC disponível'] = typeof RTCPeerConnection !== 'undefined' ? true : (IN_CLAUDE ? 'não (bloqueado dentro do Claude)' : 'não');
+  o['endereço IP'] = 'use o botão IP público em Dados com permissão';
+  return o;
+}
+async function storageInfo() {
+  const o = { cookieEnabled: navigator.cookieEnabled };
+  for (const n of ['localStorage', 'sessionStorage']) {
+    try { const s = window[n]; s.setItem('__rx', '1'); s.removeItem('__rx'); o[n] = 'disponível'; } catch (e) { o[n] = 'bloqueado (' + e.name + ')'; }
+  }
+  o.indexedDB = !!window.indexedDB; o['Cache API'] = 'caches' in window;
+  o['Origin Private File System'] = !!(navigator.storage && navigator.storage.getDirectory);
+  o['File System Access (abrir/salvar arquivos)'] = 'showOpenFilePicker' in window;
+  if (navigator.storage && navigator.storage.estimate) {
+    const e = await withTimeout(navigator.storage.estimate());
+    o['cota estimada'] = bytes(e.quota); o['em uso'] = bytes(e.usage);
+    const ua = navigator.userAgent, webkitOnly = /AppleWebKit/.test(ua) && !/Chrome|CriOS|Edg|FxiOS|Firefox/.test(ua) && /Safari\//.test(ua);
+    if (webkitOnly && !FRAMED && e.quota) o['capacidade do aparelho estimada'] = '≈ ' + bytes(e.quota / 0.6) + ' (o Safari dá a cada site 60% do disco total)';
+    else if (/Chrome\//.test(ua)) o['cota e tamanho do disco'] = 'o Chrome 144+ informa uso + no máximo 10 GB de propósito, para não revelar o disco';
+  } else o['storage.estimate'] = NS;
+  if (navigator.storage && navigator.storage.persisted) { try { o['armazenamento persistente'] = await withTimeout(navigator.storage.persisted()); } catch (e) {} }
+  o['document.cookie (caracteres)'] = (() => { try { return document.cookie.length; } catch (e) { return 'bloqueado'; } })();
+  return o;
+}
+async function permissions() {
+  if (!navigator.permissions || !navigator.permissions.query) return { status: NS };
+  const names = ['geolocation','notifications','push','camera','microphone','clipboard-read','clipboard-write','persistent-storage','midi','background-sync','periodic-background-sync','background-fetch','accelerometer','gyroscope','magnetometer','ambient-light-sensor','screen-wake-lock','system-wake-lock','local-fonts','window-management','storage-access','top-level-storage-access','payment-handler','idle-detection','display-capture','nfc','speaker-selection','captured-surface-control','keyboard-lock','pointer-lock','local-network-access','web-app-installation'];
+  const o = {};
+  await Promise.all(names.map(async n => {
+    try { const d = n === 'push' ? { name: n, userVisibleOnly: true } : { name: n }; const r = await withTimeout(navigator.permissions.query(d), 2500); o[n] = r.state; }
+    catch (e) { o[n] = NS + ' (nome não reconhecido)'; }
+  }));
+  return Object.fromEntries(names.map(n => [n, o[n]]));
+}
+async function battery() {
+  if (!navigator.getBattery) return { status: NS + ' (só Chrome/Edge)' };
+  const b = await withTimeout(navigator.getBattery());
+  const t = s => s === Infinity ? '∞ (sem estimativa)' : Math.round(s / 60) + ' min';
+  const o = { nível: Math.round(b.level * 100) + '%', carregando: b.charging, 'tempo até carregar': t(b.chargingTime), 'tempo até descarregar': t(b.dischargingTime) };
+  if (b.level === 1 && b.charging && b.dischargingTime === Infinity) o['leitura'] = 'valores típicos de PC de mesa sem bateria';
+  return o;
+}
+function jsFeatures() {
+  const cs = p => { try { return CSS.supports(p); } catch (e) { return false; } };
+  let simd = false; try { simd = WebAssembly.validate(new Uint8Array([0,97,115,109,1,0,0,0,1,5,1,96,0,1,123,3,2,1,0,10,10,1,8,0,65,0,253,15,253,98,11])); } catch (e) {}
+  return {
+    isSecureContext: window.isSecureContext, crossOriginIsolated: !!window.crossOriginIsolated,
+    WebAssembly: typeof WebAssembly === 'object', 'WebAssembly SIMD': simd,
+    'WebAssembly JSPI': typeof WebAssembly === 'object' && typeof WebAssembly.Suspending === 'function',
+    SharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined', 'Web Workers': typeof Worker !== 'undefined',
+    SharedWorker: typeof SharedWorker !== 'undefined', 'Service Worker': 'serviceWorker' in navigator,
+    OffscreenCanvas: typeof OffscreenCanvas !== 'undefined', WebSocket: typeof WebSocket !== 'undefined',
+    WebTransport: typeof WebTransport !== 'undefined', 'WebRTC': typeof RTCPeerConnection !== 'undefined',
+    'WebCodecs': typeof VideoEncoder !== 'undefined', 'WebXR': 'xr' in navigator, 'WebNN': 'ml' in navigator,
+    'Notification.permission': window.Notification ? Notification.permission : NS,
+    PaymentRequest: typeof PaymentRequest !== 'undefined', 'Apple Pay JS': typeof ApplePaySession !== 'undefined',
+    'Web Speech (reconhecimento)': has('SpeechRecognition'), 'EyeDropper (conta-gotas)': typeof EyeDropper !== 'undefined',
+    'Document Picture-in-Picture': 'documentPictureInPicture' in window, 'Intl.Segmenter': !!Intl.Segmenter,
+    structuredClone: typeof structuredClone === 'function', 'Promise.withResolvers': typeof Promise.withResolvers === 'function',
+    'Iterator helpers': typeof Iterator !== 'undefined' && typeof Iterator.prototype.map === 'function',
+    'Set.prototype.union': typeof Set.prototype.union === 'function', 'RegExp.escape': typeof RegExp.escape === 'function',
+    'Error.isError': typeof Error.isError === 'function', 'Math.sumPrecise': typeof Math.sumPrecise === 'function',
+    Float16Array: typeof Float16Array !== 'undefined', Temporal: typeof Temporal !== 'undefined',
+    'View Transitions': 'startViewTransition' in document, 'Popover API': HTMLElement.prototype.hasOwnProperty('popover'),
+    'Sanitizer / setHTML': typeof Element.prototype.setHTML === 'function',
+    'CSS :has()': cs('selector(:has(a))'), 'CSS container queries': cs('container-type: inline-size'),
+    'CSS subgrid': cs('grid-template-columns: subgrid'), 'CSS nesting': typeof CSSStyleRule !== 'undefined' && 'cssRules' in CSSStyleRule.prototype,
+    'CSS anchor positioning': cs('anchor-name: --a'), 'CSS color-mix()': cs('color: color-mix(in srgb, red, blue)'),
+    'CSS oklch()': cs('color: oklch(50% 0.1 200)'), 'CSS backdrop-filter': cs('backdrop-filter: blur(2px)') || cs('-webkit-backdrop-filter: blur(2px)'),
+    'CSS text-wrap: balance': cs('text-wrap: balance'), 'CSS scroll-driven animations': cs('animation-timeline: scroll()'),
+    'CSS field-sizing': cs('field-sizing: content'), 'CSS @starting-style': typeof CSSStartingStyleRule !== 'undefined',
+    'CSS if()': cs('color: if(style(--x: 1): red; else: blue)'), 'CSS corner-shape': cs('corner-shape: squircle'),
+    'CSS @property': !!(window.CSS && CSS.registerProperty), 'CSS Houdini paint': !!(window.CSS && CSS.paintWorklet)
+  };
+}
+async function builtinAI() {
+  const o = {};
+  const check = async (name, opts) => {
+    const C = window[name];
+    if (!C || typeof C.availability !== 'function') return NS;
+    try { const r = await withTimeout(C.availability(opts), 4000); return { available: 'pronto no aparelho', downloadable: 'disponível para baixar', downloading: 'baixando o modelo', unavailable: 'indisponível neste aparelho' }[r] || r; }
+    catch (e) { return e.name === 'NotAllowedError' || e.name === 'SecurityError' ? 'bloqueado neste quadro' : 'erro (' + e.name + ')'; }
+  };
+  o['LanguageModel (Gemini Nano, prompt)'] = await check('LanguageModel', { expectedInputs: [{ type: 'text', languages: ['en'] }] });
+  o['Summarizer (resumir)'] = await check('Summarizer');
+  o['Writer (escrever)'] = await check('Writer');
+  o['Rewriter (reescrever)'] = await check('Rewriter');
+  o['Proofreader (revisar)'] = await check('Proofreader');
+  o['LanguageDetector (detectar idioma)'] = await check('LanguageDetector');
+  o['Translator · inglês → português'] = await check('Translator', { sourceLanguage: 'en', targetLanguage: 'pt' });
+  o['WebNN (navigator.ml)'] = 'ml' in navigator;
+  return o;
+}
+let fontList = [];
+function fonts() {
+  const list = ['Agency FB','Aharoni','Aldhabi','Algerian','Arial','Arial Black','Arial Narrow','Arial Rounded MT Bold','Arial Unicode MS','Bahnschrift','Baskerville Old Face','Bauhaus 93','Bell MT','Berlin Sans FB','Bodoni MT','Book Antiqua','Bookman Old Style','Bradley Hand ITC','Britannic Bold','Broadway','Brush Script MT','Calibri','Calibri Light','Californian FB','Cambria','Cambria Math','Candara','Cascadia Code','Cascadia Mono','Castellar','Centaur','Century','Century Gothic','Century Schoolbook','Chiller','Colonna MT','Comic Sans MS','Consolas','Constantia','Cooper Black','Copperplate Gothic Bold','Corbel','Courier New','Curlz MT','Dubai','Ebrima','Edwardian Script ITC','Elephant','Engravers MT','Eras Bold ITC','Felix Titling','Footlight MT Light','Forte','Franklin Gothic Book','Franklin Gothic Medium','Freestyle Script','French Script MT','Gabriola','Gadugi','Garamond','Georgia','Gigi','Gill Sans MT','Gloucester MT Extra Condensed','Goudy Old Style','Haettenschweiler','Harlow Solid Italic','Harrington','High Tower Text','HoloLens MDL2 Assets','Impact','Imprint MT Shadow','Informal Roman','Ink Free','Javanese Text','Jokerman','Juice ITC','Kristen ITC','Kunstler Script','Leelawadee UI','Lucida Bright','Lucida Calligraphy','Lucida Console','Lucida Fax','Lucida Handwriting','Lucida Sans','Lucida Sans Typewriter','Lucida Sans Unicode','Magneto','Maiandra GD','Malgun Gothic','Marlett','Matura MT Script Capitals','Microsoft Himalaya','Microsoft JhengHei','Microsoft New Tai Lue','Microsoft PhagsPa','Microsoft Sans Serif','Microsoft Tai Le','Microsoft YaHei','Microsoft Yi Baiti','MingLiU-ExtB','Mistral','Modern No. 20','Mongolian Baiti','Monotype Corsiva','MS Gothic','MS Outlook','MS Reference Sans Serif','MS UI Gothic','MV Boli','Myanmar Text','Niagara Solid','Nirmala UI','OCR A Extended','Old English Text MT','Onyx','Palace Script MT','Palatino Linotype','Papyrus','Parchment','Perpetua','Playbill','Poor Richard','Pristina','Rage Italic','Ravie','Rockwell','Script MT Bold','Segoe Fluent Icons','Segoe MDL2 Assets','Segoe Print','Segoe Script','Segoe UI','Segoe UI Emoji','Segoe UI Historic','Segoe UI Symbol','Segoe UI Variable','Showcard Gothic','SimSun','Sitka Text','Snap ITC','Stencil','Sylfaen','Symbol','Tahoma','Tempus Sans ITC','Times New Roman','Trebuchet MS','Tw Cen MT','Verdana','Viner Hand ITC','Vivaldi','Vladimir Script','Webdings','Wide Latin','Wingdings','Wingdings 2','Wingdings 3','Yu Gothic',
+    'Helvetica','Helvetica Neue','Menlo','Monaco','SF Pro Text','SF Pro Display','SF Pro Rounded','SF Compact','SF Mono','New York','Avenir','Avenir Next','Avenir Next Condensed','Futura','Gill Sans','Optima','Didot','Baskerville','Big Caslon','Bodoni 72','American Typewriter','Chalkboard SE','Chalkduster','Charter','Copperplate','Hoefler Text','Iowan Old Style','Marker Felt','Noteworthy','Palatino','Party LET','Phosphate','Rockwell','Savoye LET','Skia','Snell Roundhand','Superclarendon','Trattatello','Zapfino','Apple Color Emoji','Apple SD Gothic Neo','Apple Chancery','Apple Braille','Arial Hebrew','Athelas','Kefa','Kohinoor Devanagari','Mishafi','PingFang SC','PingFang TC','Hiragino Sans','Hiragino Mincho ProN','Geneva','Lucida Grande','Courier','Times','Seravek','Sukhumvit Set','Thonburi','Academy Engraved LET','Bradley Hand','Cochin','Damascus','Euphemia UCAS','Galvji','Grantha Sangam MN','Mukta Mahee','Myanmar Sangam MN','Noto Nastaliq Urdu','STIX Two Text',
+    'Roboto','Roboto Mono','Roboto Condensed','Google Sans','Product Sans','Noto Sans','Noto Serif','Noto Color Emoji','Noto Sans Mono','Droid Sans','Droid Serif','Ubuntu','Ubuntu Mono','DejaVu Sans','DejaVu Serif','DejaVu Sans Mono','Liberation Sans','Liberation Serif','Liberation Mono','Cantarell','Open Sans','Source Sans Pro','Source Code Pro','Source Han Sans','Fira Sans','Fira Code','JetBrains Mono','Hack','Inter','Lato','Montserrat','Poppins','Raleway','Nunito','Oswald','Merriweather','PT Sans','PT Serif','Myriad Pro','Minion Pro','Adobe Garamond Pro','Adobe Caslon Pro','Acumin Pro','Proxima Nova','Gotham','Futura PT','Helvetica LT Std','Font Awesome 6 Free','Font Awesome 5 Free','Material Icons','Material Symbols Outlined'];
+  const ctx = document.createElement('canvas').getContext('2d');
+  const s = 'mmmmmmmmmwwwwwlli10OQ@#ção';
+  const base = ['monospace', 'sans-serif', 'serif'];
+  const w = f => { ctx.font = '72px ' + f; return ctx.measureText(s).width; };
+  const bw = base.map(w);
+  const uniq = [...new Set(list)];
+  fontList = uniq.filter(f => base.some((b, i) => w(`"${f}", ${b}`) !== bw[i]));
+  return { 'testadas': uniq.length, 'encontradas': fontList.length, 'fontes detectadas': fontList, 'lista completa': 'botão Fontes locais em Dados com permissão (só Chrome/Edge no desktop)' };
+}
+async function voices() {
+  if (!('speechSynthesis' in window)) return { status: NS };
+  let v = speechSynthesis.getVoices();
+  if (!v.length) { await new Promise(r => { speechSynthesis.addEventListener('voiceschanged', r, { once: true }); setTimeout(r, 1500); }); v = speechSynthesis.getVoices(); }
+  const o = { total: v.length };
+  v.forEach(x => { let k = x.name; let i = 2; while (k in o) k = x.name + ' (' + i++ + ')'; o[k] = x.lang + (x.localService ? ' · local' : ' · remota') + (x.default ? ' · padrão' : ''); });
+  return o;
+}
+async function cpu() {
+  const o = {};
+  o['threads lógicas (hardwareConcurrency)'] = navigator.hardwareConcurrency ?? NS;
+  const tier = navigator.cpuPerformance;
+  const tl = { 0: 'não classificado', 1: 'fraco: vídeo baixo', 2: 'modesto', 3: 'capaz', 4: 'folga de sobra: 1080p com efeitos' };
+  o['nível de CPU (navigator.cpuPerformance)'] = tier === undefined ? NS + ' (Chrome 152+)' : `${tier} de 4 · ${tl[tier] || ''}`;
+  o['memória RAM (deviceMemory, GB)'] = navigator.deviceMemory !== undefined ? navigator.deviceMemory + ' (arredondado; o Chrome limita em 8)' : NS + ' (Safari e Firefox escondem)';
+  if ('PressureObserver' in window) {
+    try { const ks = PressureObserver.knownSources; o['Compute Pressure · fontes'] = typeof ks === 'function' ? ks() : ks; } catch (e) {}
+    try {
+      o['Compute Pressure · carga da CPU agora'] = await new Promise((res, rej) => {
+        let ob; const tm = setTimeout(() => { try { ob && ob.disconnect(); } catch (e) {} res('sem leitura em 3 s'); }, 3000);
+        ob = new PressureObserver(recs => { clearTimeout(tm); ob.disconnect(); const st = recs[recs.length - 1].state; res(st + ' · ' + ({ nominal: 'tranquila', fair: 'normal', serious: 'alta', critical: 'no limite' }[st] || '')); });
+        ob.observe('cpu', { sampleInterval: 500 }).catch(e => { clearTimeout(tm); rej(e); });
+      });
+    } catch (e) { o['Compute Pressure · carga da CPU agora'] = e.name === 'NotAllowedError' || e.name === 'SecurityError' ? 'bloqueado neste quadro' : { __err: errText(e) }; }
+  } else o['Compute Pressure'] = NS + ' (Chrome/Edge 125+)';
+  const d = []; let last = performance.now(); const stop = last + 250;
+  while (d.length < 20) { const n = performance.now(); if (n !== last) { d.push(n - last); last = n; } if (n > stop) break; }
+  o['resolução do relógio (ms)'] = d.length ? Math.min(...d).toFixed(4) : NS;
+  const runs = [];
+  for (let r = 0; r < 3; r++) { const t = performance.now(); let s = 0; for (let i = 0; i < 3e6; i++) s += Math.sqrt(i) * Math.sin(i); runs.push(performance.now() - t + (s > Infinity ? 1 : 0)); }
+  o['benchmark de CPU · 3M operações (melhor de 3, ms)'] = Math.min(...runs).toFixed(1);
+  const m = performance.memory;
+  if (m) { o['JS heap limite'] = bytes(m.jsHeapSizeLimit); o['JS heap total'] = bytes(m.totalJSHeapSize); o['JS heap em uso'] = bytes(m.usedJSHeapSize); }
+  else o['performance.memory'] = NS;
+  const nav = performance.getEntriesByType ? performance.getEntriesByType('navigation')[0] : null;
+  if (nav) { o['navegação · tipo'] = nav.type; o['navegação · protocolo'] = nav.nextHopProtocol || '(vazio)'; o['DOMContentLoaded (ms)'] = Math.round(nav.domContentLoadedEventEnd); o['load (ms)'] = Math.round(nav.loadEventEnd || nav.loadEventStart); }
+  o.timeOrigin = new Date(performance.timeOrigin).toISOString();
+  return o;
+}
+let canvasHash = '';
+async function canvasFP() {
+  const c = document.createElement('canvas'); c.width = 300; c.height = 64;
+  const x = c.getContext('2d');
+  x.textBaseline = 'top'; x.font = '17px Arial';
+  x.fillStyle = '#f60'; x.fillRect(120, 2, 70, 22);
+  x.fillStyle = '#069'; x.fillText('Raio-X ção ∑ 🧪 1.0', 4, 16);
+  x.fillStyle = 'rgba(102,204,0,0.7)'; x.fillText('Raio-X ção ∑ 🧪 1.0', 6, 18);
+  x.globalCompositeOperation = 'multiply';
+  x.fillStyle = 'rgb(255,0,255)'; x.beginPath(); x.arc(60, 32, 26, 0, Math.PI * 2); x.fill();
+  x.fillStyle = 'rgb(0,255,255)'; x.beginPath(); x.arc(90, 32, 26, 0, Math.PI * 2); x.fill();
+  const url = c.toDataURL();
+  canvasHash = await sha(url);
+  return { url, hash: canvasHash };
+}
+function mathFP() {
+  const vals = [Math.acos(0.123), Math.acosh(1e308), Math.asin(0.123), Math.asinh(1), Math.atanh(0.5), Math.atan(2), Math.sin(-1e300), Math.cos(10.000000000123), Math.tan(-1e300), Math.exp(1), Math.expm1(1), Math.log1p(10), Math.sinh(1), Math.cosh(1), Math.tanh(1), Math.cbrt(100), Math.pow(Math.PI, -100)];
+  return vals.map(String).join('|');
+}
+function emojiFP() {
+  const ctx = document.createElement('canvas').getContext('2d'); ctx.font = '32px sans-serif';
+  return ['😀', '👩‍💻', '🏳️‍🌈', '🫠', '🇧🇷', '🧪', 'ÇÃõ', '∑∫√', '中文', 'עברית'].map(s => ctx.measureText(s).width.toFixed(3)).join('|');
+}
+function pageCtx() {
+  const o = {
+    'location.origin': location.origin, 'location.protocol': location.protocol, 'document.referrer': document.referrer || '(vazio)',
+    'em iframe': FRAMED, 'ancestorOrigins': location.ancestorOrigins ? Array.from(location.ancestorOrigins) : NS,
+    'history.length': history.length, 'document.visibilityState': document.visibilityState, 'document.hasFocus()': document.hasFocus(),
+    'document.characterSet': document.characterSet, 'document.compatMode': document.compatMode,
+    'window.opener': !!window.opener
+  };
+  const pp = document.permissionsPolicy || document.featurePolicy;
+  if (pp && pp.allowedFeatures) { try { o['recursos liberados para esta página (Permissions-Policy)'] = pp.allowedFeatures().sort(); } catch (e) {} }
+  return o;
+}
+
+/* ---------- ações que pedem permissão ---------- */
+const ACTIONS = [
+  { id: 'ip', title: 'IP público e provedor', desc: 'Consulta api.ipify.org e ipapi.co: IP v4/v6, cidade aproximada e operadora. Única ação que conversa com outro site.', run: async () => {
+    const o = {};
+    const j = async (u) => { const r = await withTimeout(fetch(u, { cache: 'no-store' }), 7000); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); };
+    try { o['IPv4'] = (await j('https://api.ipify.org?format=json')).ip; } catch (e) { o['IPv4'] = { __err: explain(e) }; }
+    try { const v6 = (await j('https://api64.ipify.org?format=json')).ip; o['IPv6 (se houver)'] = v6.includes(':') ? v6 : 'sem IPv6 (só ' + v6 + ')'; } catch (e) {}
+    try {
+      const d = await j('https://ipapi.co/json/'); if (d.error) throw new Error(d.reason || 'limite da API');
+      Object.assign(o, { 'cidade (pelo IP)': d.city, 'estado': d.region, 'país': d.country_name, 'CEP aproximado': d.postal || '(sem)', 'coordenadas aproximadas': d.latitude + ', ' + d.longitude, 'operadora / ASN': (d.org || '') + ' · ' + (d.asn || ''), 'fuso pelo IP': d.timezone });
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      o['fuso do IP × fuso do sistema'] = d.timezone === tz ? '✓ iguais (' + tz + ')' : `✗ diferentes: IP em ${d.timezone}, sistema em ${tz} (VPN, proxy ou fuso trocado)`;
+      if (report && report.consistencia) { report.consistencia['fuso do IP × fuso do sistema'] = o['fuso do IP × fuso do sistema']; }
+    } catch (e) { o['geolocalização por IP'] = { __err: explain(e) }; }
+    return o;
+  } },
+  { id: 'webrtc', title: 'IPs vistos pelo WebRTC', desc: 'Abre uma conexão local com STUN do Google. Mostra o IP público e se o IP da rede local está escondido (mDNS .local).', run: async () => {
+    if (typeof RTCPeerConnection === 'undefined') throw Object.assign(new Error('RTCPeerConnection não existe nesta página.'), { name: 'NotAllowedError' });
+    const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+    pc.createDataChannel('raio-x'); const set = new Set();
+    const done = new Promise(res => { pc.onicecandidate = e => { if (!e.candidate) return res(); const p = e.candidate.candidate.split(' '); if (p.length > 7) set.add(`${p[4]} · ${p[7]} · ${p[2].toLowerCase()}`); }; setTimeout(res, 4000); });
+    await pc.setLocalDescription(await pc.createOffer()); await done; pc.close();
+    const o = {}; [...set].forEach((c, i) => o['candidato ' + (i + 1)] = c);
+    o['como ler'] = 'host com .local = IP local escondido pelo navegador; srflx = seu IP público visto pelo STUN';
+    return o;
+  } },
+  { id: 'speed', title: 'Velocidade da internet', desc: 'Mede latência, download (25 MB) e upload (8 MB) contra speed.cloudflare.com. Gasta uns 35 MB do seu plano.', run: async () => {
+    const base = 'https://speed.cloudflare.com', o = {};
+    const down = async n => { const s = performance.now(); const r = await withTimeout(fetch(`${base}/__down?bytes=${n}`, { cache: 'no-store' }), 40000); if (!r.ok) throw new Error('HTTP ' + r.status); const b = await r.arrayBuffer(); return { ms: performance.now() - s, size: b.byteLength }; };
+    const lat = []; for (let i = 0; i < 7; i++) lat.push((await down(0)).ms);
+    lat.shift(); lat.sort((a, b) => a - b);
+    o['latência (ms, mediana)'] = lat[Math.floor(lat.length / 2)].toFixed(0);
+    o['variação da latência (ms)'] = (lat[lat.length - 1] - lat[0]).toFixed(0);
+    await down(1e6);
+    const dl = await down(25e6); o['download (Mbps)'] = (dl.size * 8 / (dl.ms / 1000) / 1e6).toFixed(1);
+    try { const body = new Uint8Array(8e6); const s = performance.now(); const r = await withTimeout(fetch(`${base}/__up`, { method: 'POST', body }), 40000); await r.text(); o['upload (Mbps)'] = (body.byteLength * 8 / ((performance.now() - s) / 1000) / 1e6).toFixed(1); }
+    catch (e) { o['upload'] = { __err: explain(e) }; }
+    try { const m = await (await withTimeout(fetch(`${base}/meta`), 6000)).json(); if (m.colo) o['servidor Cloudflare usado'] = m.colo + (m.city ? ' · ' + m.city : ''); if (m.asOrganization) o['operadora'] = m.asOrganization; } catch (e) {}
+    o['observação'] = 'teste curto, de uma conexão só; o speed.cloudflare.com completo é mais preciso';
+    return o;
+  } },
+  { id: 'mouse', title: 'Taxa de atualização do mouse', desc: 'Clique em Executar e mexa o mouse em círculos sem parar por 3 segundos. Mostra se ele reporta a 125, 500, 1000 Hz ou mais.', run: () => new Promise(res => {
+    const ts = [], types = new Set(); let pressure = false;
+    const h = e => { types.add(e.pointerType); if (e.pressure && e.pressure !== 0.5) pressure = true; const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : []; (evs.length ? evs : [e]).forEach(x => ts.push(x.timeStamp)); };
+    addEventListener('pointermove', h);
+    setTimeout(() => {
+      removeEventListener('pointermove', h);
+      const d = []; for (let i = 1; i < ts.length; i++) { const v = ts[i] - ts[i - 1]; if (v > 0 && v < 30) d.push(v); }
+      if (d.length < 40) return res({ status: 'poucos movimentos. Rode de novo mexendo o mouse o tempo todo.' });
+      d.sort((a, b) => a - b); const hz = 1000 / d[Math.floor(d.length / 2)];
+      const near = [60, 125, 250, 500, 1000, 2000, 4000, 8000].reduce((a, b) => Math.abs(Math.log(b / hz)) < Math.abs(Math.log(a / hz)) ? b : a);
+      res({ 'eventos recebidos': ts.length, 'taxa medida (Hz)': hz.toFixed(0), 'taxa provável (Hz)': near, 'tipo de ponteiro': [...types], 'sensível à pressão (caneta)': pressure, 'observação': 'o Chrome e o Safari raramente entregam mais de 1000 Hz, mesmo em mouse de 4000/8000 Hz' });
+    }, 3000);
+  }) },
+  { id: 'cpubench', title: 'Benchmark de CPU multi-núcleo', desc: 'Roda o mesmo cálculo em 1 thread e depois em todas ao mesmo tempo. O ganho mostra quantos núcleos trabalham de verdade.', run: async () => {
+    const src = 'onmessage = e => { const t = performance.now(); let s = 0; for (let i = 0; i < e.data; i++) s += Math.sqrt(i) * Math.sin(i); postMessage({ ms: performance.now() - t, s }); };';
+    const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+    const N = 2e7, T = navigator.hardwareConcurrency || 4;
+    const job = () => new Promise((res, rej) => { const w = new Worker(url); w.onmessage = e => { w.terminate(); res(e.data.ms); }; w.onerror = e => { w.terminate(); rej(new Error(e.message || 'o worker falhou')); }; w.postMessage(N); });
+    try {
+      await job();
+      const single = Math.min(await job(), await job());
+      const s = performance.now(); await Promise.all(Array.from({ length: T }, job)); const multi = performance.now() - s;
+      const sp = single * T / multi;
+      return { 'threads usadas': T, '1 thread (ms)': single.toFixed(0), [`${T} threads juntas (ms)`]: multi.toFixed(0), 'núcleos efetivos': sp.toFixed(1) + ' de ' + T, 'leitura': sp < T * 0.75 ? 'ganho abaixo do nº de threads: Hyper-Threading/SMT, núcleos de eficiência ou CPU limitada por temperatura' : 'ganho perto do nº de threads: quase todas as threads rendem como núcleos inteiros' };
+    } finally { URL.revokeObjectURL(url); }
+  } },
+  { id: 'gpubench', title: 'Benchmark da GPU (WebGPU)', desc: 'Roda um shader de cálculo por menos de 1 segundo e estima a potência da placa em GFLOPS.', run: async () => {
+    if (!navigator.gpu) return { status: NS };
+    const ad = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }); if (!ad) return { status: 'nenhum adaptador WebGPU' };
+    const dev = await ad.requestDevice();
+    const WG = 256, GROUPS = 4096, ITER = 4096, N = WG * GROUPS;
+    const code = `@group(0) @binding(0) var<storage, read_write> outBuf: array<f32>;
+@compute @workgroup_size(${WG})
+fn main(@builtin(global_invocation_id) id: vec3<u32>) {
+  var a = vec4<f32>(f32(id.x) * 1e-9, 1.0, 0.5, 0.25);
+  var d = a + vec4<f32>(0.1);
+  let b = vec4<f32>(0.99999, 0.99998, 0.99997, 0.99996);
+  let c = vec4<f32>(0.00001, 0.00002, 0.00003, 0.00004);
+  for (var i = 0u; i < ${ITER}u; i = i + 1u) {
+    a = fma(a, b, c); d = fma(d, b, c); a = fma(a, b, c); d = fma(d, b, c);
+  }
+  outBuf[id.x] = a.x + a.y + a.z + a.w + d.x + d.y + d.z + d.w;
+}`;
+    const pipe = dev.createComputePipeline({ layout: 'auto', compute: { module: dev.createShaderModule({ code }), entryPoint: 'main' } });
+    const buf = dev.createBuffer({ size: N * 4, usage: GPUBufferUsage.STORAGE });
+    const bg = dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: buf } }] });
+    const run = async () => { const enc = dev.createCommandEncoder(); const p = enc.beginComputePass(); p.setPipeline(pipe); p.setBindGroup(0, bg); p.dispatchWorkgroups(GROUPS); p.end(); const s = performance.now(); dev.queue.submit([enc.finish()]); await dev.queue.onSubmittedWorkDone(); return performance.now() - s; };
+    try {
+      await run(); const t = []; for (let i = 0; i < 5; i++) t.push(await run());
+      const best = Math.min(...t), flops = N * ITER * 32;
+      return { 'GFLOPS medidos (fp32)': Math.round(flops / (best / 1000) / 1e9), 'melhor tempo (ms)': best.toFixed(1), 'cálculos por rodada': (flops / 1e9).toFixed(0) + ' bilhões', 'referência teórica': 'RTX 2060 ≈ 6.500 · RTX 3060 ≈ 12.700 · Intel UHD 630 ≈ 460. No navegador é normal chegar a 50–80% disso.' };
+    } finally { buf.destroy(); dev.destroy(); }
+  } },
+  { id: 'geo', title: 'Localização (GPS)', desc: 'Pede a posição com alta precisão: coordenadas, precisão, altitude e velocidade.', run: () => new Promise((res, rej) => {
+    if (!navigator.geolocation) return res({ status: NS });
+    navigator.geolocation.getCurrentPosition(p => {
+      const c = p.coords, f = v => v == null ? '(sem leitura)' : v;
+      res({ latitude: c.latitude, longitude: c.longitude, 'precisão (m)': Math.round(c.accuracy), 'altitude (m)': f(c.altitude), 'precisão da altitude (m)': f(c.altitudeAccuracy), 'direção (graus)': f(c.heading), 'velocidade (m/s)': f(c.speed), 'horário da leitura': new Date(p.timestamp).toLocaleString(), 'ver no mapa': `https://www.openstreetmap.org/?mlat=${c.latitude}&mlon=${c.longitude}#map=17/${c.latitude}/${c.longitude}` });
+    }, e => rej(Object.assign(new Error(e.message || 'código ' + e.code), { name: e.code === 1 ? 'NotAllowedError' : 'Error' })), { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+  }) },
+  { id: 'cam', title: 'Câmera e microfone', desc: 'Liga por um instante para revelar os nomes reais dos dispositivos, resolução máxima e fps da câmera. Desliga logo em seguida.', run: async () => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return { status: NS };
+    let s; try { s = await navigator.mediaDevices.getUserMedia({ video: true, audio: true }); } catch (e) { if (e.name === 'NotFoundError') s = await navigator.mediaDevices.getUserMedia({ audio: true }); else throw e; }
+    const o = {};
+    try {
+      const vt = s.getVideoTracks()[0];
+      if (vt) {
+        o['câmera · nome'] = vt.label; const st = vt.getSettings();
+        o['câmera · agora'] = `${st.width}×${st.height} @ ${st.frameRate ? Math.round(st.frameRate) : '?'} fps`;
+        if (vt.getCapabilities) { const c = vt.getCapabilities(); if (c.width) o['câmera · resolução máxima'] = `${c.width.max}×${c.height.max}`; if (c.frameRate) o['câmera · fps máximo'] = Math.round(c.frameRate.max); if (c.facingMode && c.facingMode.length) o['câmera · lados'] = c.facingMode; o['câmera · ajustes disponíveis'] = Object.keys(c).sort(); }
+      }
+      const at = s.getAudioTracks()[0];
+      if (at) { o['microfone · nome'] = at.label; const st = at.getSettings(); o['microfone · configuração'] = `${st.sampleRate || '?'} Hz · ${st.channelCount || '?'} canal(is) · eco ${st.echoCancellation ? 'cancelado' : 'não'} · ruído ${st.noiseSuppression ? 'suprimido' : 'não'}`; }
+      const d = await navigator.mediaDevices.enumerateDevices();
+      d.forEach((x, i) => o[`dispositivo ${i + 1} · ${x.kind}`] = x.label || '(sem nome)');
+    } finally { s.getTracks().forEach(t => t.stop()); }
+    return o;
+  } },
+  { id: 'screens', title: 'Todos os monitores', desc: 'getScreenDetails: nome de cada monitor, resolução, posição, principal ou interno. Só Chrome/Edge no desktop.', run: async () => {
+    if (!window.getScreenDetails) return { status: NS + ' (só Chrome/Edge no desktop)' };
+    const d = await window.getScreenDetails(); const o = { monitores: d.screens.length };
+    d.screens.forEach((s, i) => { const p = `monitor ${i + 1}`; o[p + ' · nome'] = s.label || '(sem nome)'; o[p + ' · tamanho'] = `${s.width}×${s.height} CSS · ${Math.round(s.width * s.devicePixelRatio)}×${Math.round(s.height * s.devicePixelRatio)} físicos`; o[p + ' · posição'] = `${s.left}, ${s.top}`; o[p + ' · escala (DPR)'] = s.devicePixelRatio; o[p + ' · principal'] = s.isPrimary; o[p + ' · tela interna'] = s.isInternal; o[p + ' · profundidade de cor'] = s.colorDepth; });
+    return o;
+  } },
+  { id: 'fonts', title: 'Fontes locais (lista completa)', desc: 'queryLocalFonts lista todas as famílias instaladas, não só as testadas. Só Chrome/Edge no desktop.', run: async () => {
+    if (!window.queryLocalFonts) return { status: NS + ' (só Chrome/Edge no desktop)' };
+    const f = await queryLocalFonts(); const fam = [...new Set(f.map(x => x.family))].sort((a, b) => a.localeCompare(b));
+    return { 'arquivos de fonte': f.length, 'famílias': fam.length, 'lista de famílias': fam };
+  } },
+  { id: 'motion', title: 'Sensores de movimento', desc: 'Acelerômetro, giroscópio e bússola por 1,5 s. No iPhone o Safari pede autorização. Mexa o aparelho durante a leitura.', run: async () => {
+    const o = {};
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+      o['permissão (iOS)'] = await DeviceMotionEvent.requestPermission();
+      try { if (DeviceOrientationEvent.requestPermission) await DeviceOrientationEvent.requestPermission(); } catch (e) {}
+    }
+    const read = ev => new Promise(res => { let last = null; const h = e => last = e; addEventListener(ev, h); setTimeout(() => { removeEventListener(ev, h); res(last); }, 1500); });
+    const [m, r] = await Promise.all([read('devicemotion'), read('deviceorientation')]);
+    const f = arr => arr.map(v => v == null ? '—' : Number(v).toFixed(2)).join(', ');
+    if (m && (m.accelerationIncludingGravity || {}).x != null) { const a = m.accelerationIncludingGravity, g = m.rotationRate || {}; o['aceleração com gravidade (x, y, z m/s²)'] = f([a.x, a.y, a.z]); o['rotação (α, β, γ °/s)'] = f([g.alpha, g.beta, g.gamma]); o['intervalo do sensor (ms)'] = m.interval; }
+    else o['acelerômetro'] = 'nenhum evento (aparelho sem sensor, como um PC, ou bloqueado)';
+    if (r && r.alpha != null) { o['orientação (α, β, γ °)'] = f([r.alpha, r.beta, r.gamma]); o['referência absoluta'] = r.absolute; if (r.webkitCompassHeading != null) o['bússola (iOS, °)'] = Math.round(r.webkitCompassHeading); }
+    else o['orientação'] = 'nenhum evento';
+    return o;
+  } },
+  { id: 'usb', title: 'Dispositivo USB', desc: 'Abre o seletor de USB e mostra fabricante, produto, IDs e número de série do que você escolher.', run: async () => {
+    if (!navigator.usb) return { status: NS + ' (só Chrome/Edge)' };
+    const d = await navigator.usb.requestDevice({ filters: [] });
+    return { produto: d.productName || '(sem nome)', fabricante: d.manufacturerName || '(sem nome)', 'vendorId': hex4(d.vendorId), 'productId': hex4(d.productId), 'número de série': d.serialNumber || '(não informado)', 'versão USB': `${d.usbVersionMajor}.${d.usbVersionMinor}${d.usbVersionSubminor}`, 'classe': hex4(d.deviceClass), 'configurações': d.configurations.length };
+  } },
+  { id: 'hid', title: 'Dispositivo HID', desc: 'Teclados, mouses, controles e headsets: nome e IDs do fabricante.', run: async () => {
+    if (!navigator.hid) return { status: NS + ' (só Chrome/Edge no desktop)' };
+    const ds = await navigator.hid.requestDevice({ filters: [] }); if (!ds.length) return { status: 'nenhum escolhido' };
+    const o = {}; ds.forEach((d, i) => { o[`HID ${i + 1} · nome`] = d.productName; o[`HID ${i + 1} · vendorId/productId`] = hex4(d.vendorId) + ' / ' + hex4(d.productId); o[`HID ${i + 1} · coleções`] = d.collections.length; });
+    return o;
+  } },
+  { id: 'bt', title: 'Bluetooth', desc: 'Abre o seletor de Bluetooth e mostra o nome e o ID do aparelho escolhido.', run: async () => {
+    if (!navigator.bluetooth) return { status: NS + ' (só Chrome/Edge; o Safari não tem Web Bluetooth)' };
+    const ok = navigator.bluetooth.getAvailability ? await navigator.bluetooth.getAvailability() : 'desconhecido';
+    const d = await navigator.bluetooth.requestDevice({ acceptAllDevices: true });
+    return { 'adaptador Bluetooth presente': ok, nome: d.name || '(sem nome)', id: d.id };
+  } },
+  { id: 'midi', title: 'Instrumentos MIDI', desc: 'Lista entradas e saídas MIDI (teclados musicais, controladoras, sintetizadores do sistema).', run: async () => {
+    if (!navigator.requestMIDIAccess) return { status: NS };
+    const a = await navigator.requestMIDIAccess({ sysex: false }); const o = {};
+    a.inputs.forEach(p => o['entrada · ' + p.name] = p.manufacturer || '(fabricante não informado)');
+    a.outputs.forEach(p => o['saída · ' + p.name] = p.manufacturer || '(fabricante não informado)');
+    if (!Object.keys(o).length) o.status = 'nenhum dispositivo MIDI';
+    return o;
+  } },
+  { id: 'notif', title: 'Notificações e armazenamento persistente', desc: 'Pede permissão de notificação e pede para o navegador não apagar os dados desta página.', run: async () => {
+    const o = {};
+    o['notificações'] = window.Notification ? await Notification.requestPermission() : NS + ' (no iPhone só em app instalado na tela inicial)';
+    o['armazenamento persistente'] = navigator.storage && navigator.storage.persist ? await navigator.storage.persist() : NS;
+    return o;
+  } }
+];
+
+/* ---------- Web API interfaces (índice do MDN) ---------- */
+const API_LIST = [...new Set('AbortController AbortSignal AbsoluteOrientationSensor Accelerometer AnalyserNode Animation AnimationEvent AnimationTimeline Attr AudioBuffer AudioBufferSourceNode AudioContext AudioData AudioDecoder AudioEncoder AudioParam AudioWorklet AudioWorkletNode AuthenticatorAssertionResponse AuthenticatorAttestationResponse BackgroundFetchManager BarcodeDetector BatteryManager BeforeUnloadEvent BiquadFilterNode Blob BlobEvent Bluetooth BluetoothDevice BroadcastChannel ByteLengthQueuingStrategy CSSAnimation CSSContainerRule CSSFontFaceRule CSSImportRule CSSKeyframesRule CSSLayerBlockRule CSSMediaRule CSSNamespaceRule CSSNestedDeclarations CSSPropertyRule CSSScopeRule CSSStartingStyleRule CSSStyleDeclaration CSSStyleSheet CSSSupportsRule CSSTransition Cache CacheStorage CanvasGradient CanvasPattern CanvasRenderingContext2D CaptureController ChannelMergerNode ChannelSplitterNode CharacterData Clipboard ClipboardEvent ClipboardItem CloseEvent CloseWatcher CompositionEvent CompressionStream ConstantSourceNode ContactsManager ContentVisibilityAutoStateChangeEvent ConvolverNode CookieStore CountQueuingStrategy Credential CredentialsContainer Crypto CryptoKey CustomElementRegistry CustomEvent CustomStateSet DOMException DOMMatrix DOMParser DOMPoint DOMRect DataTransfer DecompressionStream DelayNode DeviceMotionEvent DeviceOrientationEvent DigitalCredential DocumentPictureInPicture DocumentTimeline DragEvent DynamicsCompressorNode EditContext ElementInternals EncodedAudioChunk EncodedVideoChunk ErrorEvent Event EventSource EventTarget EyeDropper FederatedCredential File FileList FileReader FileSystemDirectoryHandle FileSystemFileHandle FileSystemHandle FileSystemWritableFileStream FocusEvent FontData FontFace FontFaceSet FormData FormDataEvent FragmentDirective GPU GPUAdapter GPUDevice GainNode Gamepad GamepadHapticActuator Geolocation GeolocationCoordinates GravitySensor Gyroscope HID HIDDevice HashChangeEvent Headers Highlight HighlightRegistry History IDBDatabase IDBFactory IIRFilterNode IdentityCredential IdleDetector ImageBitmap ImageBitmapRenderingContext ImageCapture ImageData ImageDecoder Ink InputDeviceCapabilities InputEvent IntersectionObserver IntersectionObserverEntry Keyboard KeyboardEvent KeyboardLayoutMap KeyframeEffect LanguageDetector LanguageModel LargestContentfulPaint LaunchQueue LayoutShift LinearAccelerationSensor Lock LockManager Magnetometer ManagedMediaSource MathMLElement MediaCapabilities MediaDeviceInfo MediaDevices MediaElementAudioSourceNode MediaKeySession MediaKeySystemAccess MediaKeys MediaMetadata MediaQueryList MediaRecorder MediaSession MediaSource MediaStream MediaStreamAudioDestinationNode MediaStreamTrack MediaStreamTrackGenerator MediaStreamTrackProcessor MessageChannel MessageEvent MessagePort MIDIAccess MIDIInput MIDIOutput MutationObserver NDEFReader NavigateEvent Navigation NavigationHistoryEntry NavigatorUAData NetworkInformation Notification OfflineAudioContext OffscreenCanvas OffscreenCanvasRenderingContext2D OrientationSensor OscillatorNode OverconstrainedError PageRevealEvent PageSwapEvent PageTransitionEvent PannerNode PasswordCredential Path2D PaymentManager PaymentRequest PaymentResponse Performance PerformanceEventTiming PerformanceLongAnimationFrameTiming PerformanceObserver PerformanceResourceTiming PeriodicSyncManager PeriodicWave PermissionStatus Permissions PictureInPictureWindow PointerEvent PopStateEvent Presentation PresentationRequest PressureObserver PressureRecord ProgressEvent PromiseRejectionEvent Proofreader PublicKeyCredential PushManager PushSubscription RTCDataChannel RTCPeerConnection RTCRtpScriptTransform RTCRtpSender ReadableStream RelativeOrientationSensor RemotePlayback ReportingObserver Request ResizeObserver Response Rewriter Sanitizer Scheduler Scheduling Screen ScreenDetails ScreenOrientation ScriptProcessorNode ScrollTimeline SecurityPolicyViolationEvent Selection Sensor Serial SerialPort ServiceWorker ServiceWorkerContainer ServiceWorkerRegistration ShadowRoot SharedStorage SharedWorker SourceBuffer SpeechRecognition SpeechSynthesis SpeechSynthesisUtterance StereoPannerNode Storage StorageBucketManager StorageManager StylePropertyMap SubmitEvent SubtleCrypto Summarizer SyncManager TaskController TaskSignal TextDecoder TextDecoderStream TextEncoder TextEncoderStream TextTrack TimeRanges ToggleEvent Touch TouchEvent TransformStream TransitionEvent Translator TreeWalker TrustedHTML TrustedTypePolicyFactory UIEvent URL URLPattern URLSearchParams USB USBDevice UserActivation VTTCue ValidityState VideoColorSpace VideoDecoder VideoEncoder VideoFrame VideoPlaybackQuality ViewTimeline ViewTransition VirtualKeyboard VisualViewport WGSLLanguageFeatures WakeLock WakeLockSentinel WaveShaperNode WebGL2RenderingContext WebGLRenderingContext WebSocket WebSocketStream WebTransport WheelEvent Window WindowControlsOverlay Worker Worklet WritableStream Writer XMLHttpRequest XMLSerializer XPathEvaluator XRSession XRSystem XSLTProcessor'.split(' '))].sort((a, b) => a.localeCompare(b));
+function apiCheck() { const o = {}; API_LIST.forEach(n => o[n] = has(n)); return o; }
+
+/* ---------- section registry ---------- */
+const SECTIONS = [
+  { id: 'navigator', title: 'navigator', hint: 'Todas as propriedades do objeto navigator que não são funções.', run: navDump },
+  { id: 'clienthints', title: 'Client Hints (userAgentData)', hint: 'Dados de alta precisão do Chrome/Edge: arquitetura e versão real do sistema. platformVersion 13 ou mais no Windows significa Windows 11.', run: clientHints },
+  { id: 'caps', title: 'Recursos do navigator', hint: 'Quais funções e objetos existem em navigator (Bluetooth, USB, compartilhar, vibrar…).', run: navCaps },
+  { id: 'cpu', title: 'Processador, memória e desempenho', hint: 'Núcleos, nível de CPU, carga atual (Compute Pressure), memória, precisão do relógio e um benchmark curto.', run: cpu, tag: 'novo' },
+  { id: 'tela', title: 'Tela, janela e taxa de atualização', hint: 'Pixels CSS, densidade, orientação e Hz medidos por requestAnimationFrame. No iPhone o Safari limita a 60 Hz mesmo com ProMotion, e o modo de economia de bateria também.', run: screenInfo },
+  { id: 'exibicao', title: 'Preferências de exibição', hint: 'Media queries: tema, movimento reduzido, HDR, gama de cores, tipo de ponteiro.', run: mediaQueries },
+  { id: 'idioma', title: 'Idioma, fuso e formatação', hint: 'Intl e Date: como o aparelho formata datas, números e moeda.', run: locale },
+  { id: 'teclado', title: 'Teclado', hint: 'Layout físico pela Keyboard Map API (ABNT2, US, AZERTY…). Só Chrome/Edge no desktop e só na página principal: dentro do Claude dá SecurityError.', run: keyboard, tag: 'novo' },
+  { id: 'webgl', title: 'GPU · WebGL', hint: 'Placa de vídeo real (quando o navegador não mascara), limites e precisão dos shaders.', run: webgl },
+  { id: 'webgpu', title: 'GPU · WebGPU', hint: 'Adaptador WebGPU, recursos, limites e se existe uma segunda GPU de economia de energia.', run: webgpu },
+  { id: 'audio', title: 'Áudio', hint: 'AudioContext e a impressão de áudio usada por rastreadores.', run: audio },
+  { id: 'midia', title: 'Codecs, HDR e mídia', hint: 'O que o navegador toca e grava, HDR10, Dolby Vision e Atmos, e se decodifica por hardware.', run: media },
+  { id: 'webcodecs', title: 'WebCodecs: codificar e decodificar', hint: 'Se cada codec roda por hardware (GPU/chip de mídia) ou só por software, em 1080p.', run: webcodecs, tag: 'novo' },
+  { id: 'drm', title: 'DRM (EME)', hint: 'Widevine L1/L3, PlayReady SL3000 e FairPlay: decidem se Netflix e Prime liberam HD/4K. Dentro do Claude fica bloqueado.', run: drm },
+  { id: 'passkeys', title: 'Passkeys e login', hint: 'WebAuthn: biometria do aparelho, passkeys no autopreenchimento e getClientCapabilities.', run: webauthn, tag: 'novo' },
+  { id: 'ia', title: 'IA embutida do navegador', hint: 'APIs do Chrome que rodam o Gemini Nano no próprio aparelho. Exigem 22 GB livres no disco do perfil do Chrome e GPU com mais de 4 GB de VRAM (ou 16 GB de RAM e 4 núcleos). Dentro do Claude, a política do quadro só libera Translator e LanguageDetector.', run: builtinAI, tag: 'novo' },
+  { id: 'rede', title: 'Rede', hint: 'Network Information API. O IP fica na seção Dados com permissão.', run: network },
+  { id: 'armazenamento', title: 'Armazenamento', hint: 'Cookies, storage, IndexedDB e cota (separados do resto do navegador neste quadro).', run: storageInfo },
+  { id: 'permissoes', title: 'Permissões', hint: 'Estado de cada permissão vista por esta página. No quadro do Claude a maioria aparece negada.', run: permissions },
+  { id: 'bateria', title: 'Bateria', hint: 'Battery Status API.', run: battery },
+  { id: 'controles', title: 'Controles de jogo', hint: 'Gamepad API. O navegador só mostra o controle depois que você aperta um botão nele.', run: gamepads, tag: 'novo' },
+  { id: 'sistema', title: 'Sistema e configurações', hint: 'Barra de rolagem, fonte padrão, cores do sistema, bloqueador de anúncios e sinais de privacidade.', run: sysUI, tag: 'novo' },
+  { id: 'consistencia', title: 'Consistência', hint: 'Confere se os dados batem entre si, como fazem pixelscan e CreepJS. Um ✗ indica navegador modificado, perfil antidetect, VM ou automação.', run: null, tag: 'novo' },
+  { id: 'recursos', title: 'Recursos de JS e CSS', hint: 'Suporte a recursos modernos da linguagem e do CSS.', run: jsFeatures },
+  { id: 'fontes', title: 'Fontes instaladas', hint: 'Detectadas medindo texto contra fontes genéricas, numa lista de Windows, Office, macOS/iOS, Linux e Google.', run: fonts },
+  { id: 'vozes', title: 'Vozes de síntese', hint: 'Vozes do speechSynthesis instaladas no sistema.', run: voices },
+  { id: 'impressao', title: 'Impressão digital', hint: 'Valores que sites de rastreamento combinam para reconhecer o aparelho sem cookies.', run: null },
+  { id: 'pagina', title: 'Contexto da página', hint: 'Onde esta página está rodando e quais recursos a política de permissões libera para ela.', run: pageCtx }
+];
+
+let report = null;
+
+/* ---------- summary helpers ---------- */
+function parseUA() {
+  const ua = navigator.userAgent, uad = navigator.userAgentData, R = report.clienthints || {};
+  let os = 'Desconhecido', br = 'Desconhecido', m;
+  const iPadDesk = /Macintosh/.test(ua) && navigator.maxTouchPoints > 1;
+  if ((m = ua.match(/iPhone OS (\d+)[._](\d+)/))) os = 'iOS ' + m[1] + '.' + m[2];
+  else if ((m = ua.match(/iPad.*? OS (\d+)[._](\d+)/))) os = 'iPadOS ' + m[1] + '.' + m[2];
+  else if (iPadDesk) os = 'iPadOS (modo desktop)';
+  else if (/Windows NT 10/.test(ua)) { const pv = parseInt(R.platformVersion || '0', 10); os = R.platformVersion ? (pv >= 13 ? 'Windows 11' : 'Windows 10') : 'Windows 10/11'; }
+  else if ((m = ua.match(/Windows NT ([\d.]+)/))) os = 'Windows NT ' + m[1];
+  else if ((m = ua.match(/Android (\d+(?:\.\d+)?)/))) os = 'Android ' + m[1];
+  else if (/CrOS/.test(ua)) os = 'ChromeOS';
+  else if (/Macintosh/.test(ua)) os = 'macOS' + (R.platformVersion ? ' ' + R.platformVersion : '');
+  else if (/Linux/.test(ua)) os = 'Linux';
+  const tests = [[/EdgA?\/([\d.]+)|EdgiOS\/([\d.]+)/, 'Edge'], [/OPR\/([\d.]+)/, 'Opera'], [/SamsungBrowser\/([\d.]+)/, 'Samsung Internet'], [/CriOS\/([\d.]+)/, 'Chrome (iOS)'], [/FxiOS\/([\d.]+)/, 'Firefox (iOS)'], [/Firefox\/([\d.]+)/, 'Firefox'], [/Chrome\/([\d.]+)/, 'Chrome'], [/Version\/([\d.]+).*Safari/, 'Safari']];
+  for (const [re, name] of tests) { const r = ua.match(re); if (r) { br = name + ' ' + (r[1] || r[2] || '').split('.').slice(0, 2).join('.'); break; } }
+  if (uad && Array.isArray(R.fullVersionList)) {
+    const b = R.fullVersionList.find(x => !/Not|Chromium/i.test(x)) || R.fullVersionList.find(x => /Chromium/.test(x));
+    if (b) br = b;
+  }
+  const iOS = /iPhone|iPad|iPod/.test(ua) || iPadDesk;
+  if (iOS && !/Safari\//.test(ua)) br = 'WebView de app (iOS)';
+  const engine = iOS ? 'WebKit' : /Firefox\//.test(ua) ? 'Gecko' : /Chrome\//.test(ua) ? 'Blink' : /AppleWebKit/.test(ua) ? 'WebKit' : '—';
+  return { os, br, engine, iOS };
+}
+function tile(lab, val, sub) { return `<div class="tile"><span class="lab">${esc(lab)}</span><span class="val">${esc(val)}</span><span class="sub">${esc(sub)}</span></div>`; }
+function renderSummary() {
+  const p = parseUA(), dpr = window.devicePixelRatio || 1;
+  const T = report.tela || {}, E = report.exibicao || {}, C = report.cpu || {};
+  const hz = T['taxa provável (Hz)'] ? ' · ' + T['taxa provável (Hz)'] + ' Hz' : '';
+  const hdr = E['dynamic-range (HDR)'] === 'high' ? ' · HDR' : '';
+  const gpu = glSummary.model || (glSummary.renderer && glSummary.renderer !== NS ? glSummary.renderer : '') || gpuSummary.desc || 'não identificada';
+  const gpuSub = [gpuSummary.vendor, gpuSummary.arch ? 'arquitetura ' + gpuSummary.arch : '', T && report.webgl && report.webgl['GPU · API usada pelo navegador']].filter(Boolean).join(' · ') || 'fabricante oculto';
+  const cores = navigator.hardwareConcurrency;
+  const tier = navigator.cpuPerformance !== undefined ? ` · nível ${navigator.cpuPerformance}/4` : '';
+  const mem = navigator.deviceMemory ? `RAM ≥ ${navigator.deviceMemory} GB (valor arredondado)` : 'RAM não exposta por este navegador';
+  const lang = (navigator.languages && navigator.languages[0]) || navigator.language;
+  const L = report.idioma || {};
+  const net = report.rede || {};
+  const netVal = net['connection.effectiveType'] ? String(net['connection.effectiveType']).toUpperCase() + (net['connection.type'] ? ' · ' + net['connection.type'] : '') : (navigator.onLine ? 'Online' : 'Offline');
+  const netSub = net['connection.downlink'] ? 'banda ≈ ' + String(net['connection.downlink']).split(' ')[0] + ' Mbps · latência ' + String(net['connection.rtt']).split(' ')[0] + ' ms' : 'tipo de rede não exposto';
+  const apis = Object.values(report.apis), on = apis.filter(Boolean).length;
+  const touch = navigator.maxTouchPoints > 0 ? `toque (${navigator.maxTouchPoints} pontos)` : 'sem toque';
+  const arch = report.clienthints && report.clienthints.architecture ? report.clienthints.architecture + (report.clienthints.bitness ? ' ' + report.clienthints.bitness + '-bit' : '') : navigator.platform;
+  $('#sum').innerHTML = [
+    tile('Navegador', p.br, 'motor ' + p.engine),
+    tile('Sistema', p.os, arch + ' · ' + touch),
+    tile('Tela', `${screen.width} × ${screen.height}`, `${Math.round(screen.width * dpr)} × ${Math.round(screen.height * dpr)} físicos · DPR ${dpr}${hz} · ${E['color-gamut'] || ''}${hdr}`),
+    tile('GPU', gpu, gpuSub),
+    tile('Processador', cores ? cores + ' threads lógicas' + tier : 'não exposto', mem),
+    tile('Idioma e fuso', lang, (L.timeZone || '') + ' · ' + (L['UTC offset'] || '')),
+    tile('Rede', netVal, netSub),
+    tile('APIs da Web', `${on} de ${apis.length}`, 'interfaces do índice MDN presentes')
+  ].join('');
+}
+
+/* ---------- rendering ---------- */
+function cell(v) {
+  if (v && typeof v === 'object' && !Array.isArray(v) && '__err' in v) return `<span class="e">${esc(v.__err)}</span>`;
+  if (v === true) return '<span class="t">true</span>';
+  if (v === false) return '<span class="f">false</span>';
+  if (v === null || v === undefined) return `<span class="f">${v}</span>`;
+  if (typeof v === 'string' && v.startsWith('data:image/')) return `<img class="fp" src="${v}" alt="Desenho de teste renderizado pelo canvas deste aparelho" width="300" height="64">`;
+  if (typeof v === 'string' && /^https:\/\//.test(v)) return `<a href="${esc(v)}" target="_blank" rel="noopener">${esc(v)}</a>`;
+  if (typeof v === 'string' && /^bloqueado/.test(v)) return `<span class="w">${esc(v)}</span>`;
+  if (typeof v === 'string' && v.startsWith('✓')) return `<span class="t">${esc(v)}</span>`;
+  if (typeof v === 'string' && v.startsWith('✗')) return `<span class="e">${esc(v)}</span>`;
+  if (typeof v === 'string' && (v.startsWith(NS) || v === 'não' || v.startsWith('não (') || v === 'ainda não executado')) return `<span class="f i">${esc(v)}</span>`;
+  if (typeof v === 'string' && (v === 'granted' || v === 'probably' || /^suportado/.test(v) || /hardware/.test(v) && !/^só software/.test(v) || v === 'pronto no aparelho')) return `<span class="t">${esc(v)}</span>`;
+  if (typeof v === 'string' && v === 'denied') return `<span class="e">${esc(v)}</span>`;
+  if (Array.isArray(v)) {
+    if (!v.length) return '<span class="f">[ ]</span>';
+    if (v.every(x => x === null || typeof x !== 'object')) return v.length > 3 ? `<span class="list">${v.map(x => `<span>${esc(x)}</span>`).join('')}</span>` : esc(v.join(', '));
+    return esc(JSON.stringify(v));
+  }
+  if (typeof v === 'object') return esc(JSON.stringify(v));
+  return esc(v);
+}
+function flat(obj, pre = '', out = []) {
+  if (obj && typeof obj === 'object' && !Array.isArray(obj) && '__err' in obj) { out.push([pre || 'erro', obj]); return out; }
+  for (const [k, v] of Object.entries(obj || {})) {
+    const key = pre ? pre + '.' + k : k;
+    if (v && typeof v === 'object' && !Array.isArray(v) && !('__err' in v)) { if (!Object.keys(v).length) out.push([key, '{}']); else flat(v, key, out); }
+    else out.push([key, v]);
+  }
+  return out;
+}
+function rowsHTML(obj) {
+  return flat(obj).map(([k, v]) => {
+    const sv = typeof v === 'string' && v.startsWith('data:') ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v));
+    return `<div class="row" data-s="${esc((k + ' ' + sv).toLowerCase())}"><div class="k">${esc(k)}</div><div class="v">${cell(v)}</div></div>`;
+  }).join('');
+}
+function actionsHTML() {
+  const warn = IN_CLAUDE
+    ? `<p class="note"><strong>Você está dentro do Claude.</strong> O quadro do artifact bloqueia GPS, câmera, conexões para outros sites, WebRTC e os seletores de USB e Bluetooth, então esses botões vão mostrar o motivo do bloqueio. Os benchmarks e o teste do mouse funcionam aqui. No PC, abra o arquivo HTML baixado direto no Chrome; no iPhone, hospede o arquivo num endereço HTTPS e abra no Safari.</p>`
+    : `<p class="note"><strong>Rodando fora do Claude.</strong> Cada botão pede a autorização do navegador. Nada é enviado para servidor nenhum, exceto a consulta de IP, que fala com ipify e ipapi.</p>`;
+  return warn + '<div class="acts">' + ACTIONS.map(a => {
+    const data = (report.acoes || {})[a.id];
+    return `<div class="act" id="act-${a.id}"><div class="act-head"><div><h3>${esc(a.title)}</h3><p>${esc(a.desc)}</p></div><button class="btn small" type="button" data-act="${a.id}">${data ? 'Rodar de novo' : 'Executar'}</button></div><div class="act-out" id="out-${a.id}">${rowsHTML(data || { status: 'ainda não executado' })}</div></div>`;
+  }).join('') + '</div>';
+}
+let apiMode = 'all';
+function render() {
+  renderSummary();
+  const secs = $('#secs'); const jump = $('#jump');
+  let html = '', jh = '';
+  SECTIONS.forEach(s => {
+    const data = report[s.id]; const n = flat(data).length;
+    html += `<details class="sec" id="sec-${s.id}" open><summary><h2>${esc(s.title)}</h2>${s.tag ? `<span class="tag">${s.tag}</span>` : ''}<span class="cnt">${n} ${n === 1 ? 'item' : 'itens'}</span><span class="hint">${esc(s.hint)}</span></summary>${rowsHTML(data)}</details>`;
+    jh += `<button type="button" data-to="sec-${s.id}">${esc(s.title.split(/[,:·]/)[0])}</button>`;
+    if (s.id === 'tela') { html += `<details class="sec" id="sec-acoes" open><summary><h2>Dados com permissão</h2><span class="tag">novo</span><span class="cnt">${ACTIONS.length} ações</span><span class="hint">Informações que o navegador só entrega depois que você autoriza: IP, GPS, câmera, monitores, fontes completas, sensores, USB, Bluetooth e MIDI.</span></summary><div id="actsWrap">${actionsHTML()}</div></details>`; jh += `<button type="button" data-to="sec-acoes">Com permissão</button>`; }
+  });
+  const apis = report.apis, on = Object.values(apis).filter(Boolean).length;
+  html += `<details class="sec" id="sec-apis" open><summary><h2>Interfaces da Web API (MDN)</h2><span class="cnt">${on} presentes de ${API_LIST.length}</span><span class="hint">Cada interface do índice developer.mozilla.org/docs/Web/API, verificada no objeto window deste navegador.</span></summary>
+    <div class="apis-head"><div class="seg" role="group" aria-label="Mostrar"><button type="button" data-m="all" aria-pressed="${apiMode === 'all'}">Todas</button><button type="button" data-m="on" aria-pressed="${apiMode === 'on'}">Presentes</button><button type="button" data-m="off" aria-pressed="${apiMode === 'off'}">Ausentes</button></div></div>
+    <div class="chips" id="chips">${API_LIST.map(n => `<span class="chip ${apis[n] ? 'on' : 'off'}" data-s="${n.toLowerCase()}" data-on="${apis[n] ? 1 : 0}">${n}</span>`).join('')}</div></details>`;
+  jh += `<button type="button" data-to="sec-apis">APIs (MDN)</button>`;
+  html += `<details class="sec" id="sec-comparar"><summary><h2>Comparar com outro aparelho</h2><span class="hint">Abra este link no outro aparelho, toque em Copiar JSON, mande o texto para cá (WhatsApp, e-mail, AirDrop) e cole abaixo.</span></summary>
+    <div class="cmp"><label for="other" class="status">JSON do outro aparelho</label><textarea id="other" placeholder='{"coletadoEm": "...", "navigator": { ... } }'></textarea>
+    <div class="actions"><button class="btn primary" type="button" id="doCmp">Comparar</button><span class="status" id="cmpStatus"></span></div><div id="cmpOut"></div></div></details>`;
+  jh += `<button type="button" data-to="sec-comparar">Comparar</button>`;
+  html += `<details class="sec" id="sec-json"><summary><h2>JSON completo</h2><span class="hint">Tudo o que foi coletado, no formato que o botão Copiar JSON envia.</span></summary><div class="cmp"><textarea id="raw" readonly rows="14"></textarea></div></details>`;
+  const keepOther = $('#other') ? $('#other').value : '';
+  secs.innerHTML = html; jump.innerHTML = jh;
+  if (keepOther) $('#other').value = keepOther;
+  $('#raw').value = JSON.stringify(report, null, 2);
+  applyFilter();
+}
+function applyFilter() {
+  const q = $('#q').value.trim().toLowerCase();
+  document.querySelectorAll('.sec').forEach(sec => {
+    if (sec.id === 'sec-comparar' || sec.id === 'sec-json') { sec.classList.toggle('hidden-by-filter', !!q); return; }
+    let any = false;
+    sec.querySelectorAll('.row, .chip').forEach(r => {
+      let ok = !q || r.dataset.s.includes(q);
+      if (r.classList.contains('chip')) ok = ok && (apiMode === 'all' || (apiMode === 'on') === (r.dataset.on === '1'));
+      r.classList.toggle('hidden-by-filter', !ok); if (ok) any = true;
+    });
+    sec.classList.toggle('hidden-by-filter', !!q && !any);
+    if (q && any) sec.open = true;
+  });
+}
+
+/* ---------- collect ---------- */
+async function collectAll() {
+  const btn = $('#go'); btn.disabled = true; btn.textContent = 'Coletando…';
+  const t0 = performance.now(); let done = 0; const total = SECTIONS.filter(s => s.run).length;
+  const st = $('#status'); st.textContent = `Coletando… 0/${total}`;
+  const res = {};
+  await Promise.all(SECTIONS.filter(s => s.run).map(async s => {
+    res[s.id] = await safe(() => withTimeout(Promise.resolve().then(s.run), 12000));
+    st.textContent = `Coletando… ${++done}/${total}`;
+  }));
+  const cv = await safe(canvasFP);
+  const stable = JSON.stringify([navigator.userAgent, navigator.platform, navigator.hardwareConcurrency, navigator.deviceMemory, screen.width, screen.height, screen.colorDepth, window.devicePixelRatio, (res.idioma || {}).timeZone, navigator.languages, glSummary, fontList, canvasHash, audioHash, mathFP(), emojiFP()]);
+  res.impressao = {
+    'canvas · desenho': cv.url || cv, 'canvas · hash': canvasHash || NS,
+    'áudio · soma': audioHash || NS,
+    'WebGL · hash dos parâmetros': await sha(JSON.stringify(res.webgl)),
+    'fontes · hash': await sha(fontList.join('|')),
+    'matemática do motor JS · hash': await sha(mathFP()),
+    'emoji e texto · hash': await sha(emojiFP()),
+    'hash combinado do aparelho': await sha(stable),
+    'como ler': 'Hashes iguais em dois acessos indicam o mesmo navegador. Trocar de navegador no mesmo aparelho muda a maioria deles.'
+  };
+  try { res.consistencia = consistency(res); } catch (e) { res.consistencia = { __err: errText(e) }; }
+  const prevActs = report && report.acoes;
+  report = { coletadoEm: new Date().toISOString(), contexto: IN_CLAUDE ? 'dentro do Claude' : (FRAMED ? 'iframe' : 'página independente') };
+  SECTIONS.forEach(s => report[s.id] = res[s.id]);
+  report.apis = apiCheck();
+  report.acoes = prevActs || {};
+  render();
+  const n = SECTIONS.reduce((a, s) => a + flat(report[s.id]).length, 0) + API_LIST.length;
+  st.textContent = `Coletado às ${new Date().toLocaleTimeString()} · ${n} itens · ${((performance.now() - t0) / 1000).toFixed(1)} s`;
+  btn.disabled = false; btn.textContent = 'Coletar de novo';
+}
+async function runAction(id, btn) {
+  const a = ACTIONS.find(x => x.id === id); if (!a || !report) return;
+  btn.disabled = true; const label = btn.textContent; btn.textContent = 'Executando…';
+  const out = $('#out-' + id);
+  let data;
+  try { data = await a.run(); } catch (e) { data = { resultado: { __err: explain(e) } }; }
+  data = Object.assign({ executadoEm: new Date().toLocaleTimeString() }, data);
+  report.acoes[id] = data;
+  out.innerHTML = rowsHTML(data);
+  if (id === 'ip') { const sec = $('#sec-consistencia'); if (sec) sec.innerHTML = sec.querySelector('summary').outerHTML + rowsHTML(report.consistencia); }
+  $('#raw').value = JSON.stringify(report, null, 2);
+  btn.disabled = false; btn.textContent = label === 'Executar' ? 'Rodar de novo' : label;
+  applyFilter();
+}
+
+/* ---------- compare ---------- */
+function compare() {
+  const out = $('#cmpOut'), st = $('#cmpStatus');
+  let other;
+  try { other = JSON.parse($('#other').value); } catch (e) { st.textContent = 'O texto colado não é um JSON válido. Copie de novo pelo botão Copiar JSON no outro aparelho.'; out.innerHTML = ''; return; }
+  const skip = k => k === 'coletadoEm' || k.startsWith('impressao.canvas · desenho') || /executadoEm$/.test(k);
+  const toMap = o => { const m = new Map(); flat(o).forEach(([k, v]) => { if (!skip(k)) m.set(k, typeof v === 'object' ? JSON.stringify(v) : String(v)); }); return m; };
+  const a = toMap(report), b = toMap(other);
+  const keys = [...new Set([...a.keys(), ...b.keys()])];
+  const diff = keys.filter(k => a.get(k) !== b.get(k));
+  st.textContent = `${diff.length} diferenças em ${keys.length} chaves`;
+  out.innerHTML = diff.length ? `<div class="tbl"><table><thead><tr><th>Chave</th><th>Este aparelho</th><th>Colado</th></tr></thead><tbody>${diff.map(k => `<tr><td>${esc(k)}</td><td>${a.has(k) ? esc(a.get(k)) : '<span class="f i">ausente</span>'}</td><td>${b.has(k) ? esc(b.get(k)) : '<span class="f i">ausente</span>'}</td></tr>`).join('')}</tbody></table></div>` : '<p class="status">Nenhuma diferença.</p>';
+}
+
+/* ---------- events ---------- */
+$('#ua').textContent = navigator.userAgent;
+$('#envNote').innerHTML = IN_CLAUDE
+  ? '<strong>Rodando dentro do Claude.</strong> O quadro do artifact bloqueia permissões, DRM, WebRTC, câmera, localização e conexões para outros sites, e separa o armazenamento. Hardware, tela, GPU, codecs, idioma e APIs mostram os valores reais. Para ver tudo: no PC, abra o arquivo HTML baixado direto no Chrome; no iPhone, hospede o arquivo num endereço HTTPS e abra no Safari, porque dentro do app do Claude você vê o WebView do app.'
+  : '<strong>Rodando como página independente.</strong> As permissões funcionam normalmente: use a seção Dados com permissão para IP, GPS, câmera, monitores, fontes completas e dispositivos.';
+$('#go').addEventListener('click', collectAll);
+$('#q').addEventListener('input', applyFilter);
+$('#copy').addEventListener('click', () => {
+  if (!report) return;
+  const txt = JSON.stringify(report, null, 2), b = $('#copy');
+  const done = m => { b.textContent = m; setTimeout(() => b.textContent = 'Copiar JSON', 2200); };
+  const fallback = () => { const d = $('#sec-json'); d.open = true; const r = $('#raw'); r.focus(); r.select(); d.scrollIntoView({ block: 'start' }); done('Selecionado, copie manualmente'); };
+  try { navigator.clipboard.writeText(txt).then(() => done('Copiado'), fallback); } catch (e) { fallback(); }
+});
+const goTo = id => { const d = document.getElementById(id); if (!d) return; d.open = true; d.scrollIntoView({ block: 'start' }); return d; };
+$('#toCmp').addEventListener('click', () => { if (goTo('sec-comparar')) $('#other').focus({ preventScroll: true }); });
+$('#toAct').addEventListener('click', () => goTo('sec-acoes'));
+document.addEventListener('click', e => {
+  const j = e.target.closest('[data-to]'); if (j) goTo(j.dataset.to);
+  const m = e.target.closest('[data-m]'); if (m) { apiMode = m.dataset.m; document.querySelectorAll('[data-m]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.m === apiMode))); applyFilter(); }
+  const act = e.target.closest('[data-act]'); if (act) runAction(act.dataset.act, act);
+  if (e.target.id === 'doCmp') compare();
+});
+const start = () => setTimeout(collectAll, 50);
+if (document.readyState === 'complete') start(); else addEventListener('load', start, { once: true });
+})();
+</script>
+
+</body>
+</html>
